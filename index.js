@@ -12,6 +12,9 @@ const app = express();
 // Leer el puerto desde el archivo .env o usar el puerto 3000 por defecto
 const PORT = process.env.PORT || 3000;
 
+// Array en memoria para guardar los últimos webhooks
+const webhooksRecibidos = [];
+
 // Middleware para analizar el cuerpo de las solicitudes JSON
 app.use(bodyParser.json());
 
@@ -25,13 +28,30 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Ruta básica de prueba
+// Página principal que muestra los últimos webhooks recibidos
 app.get('/', (req, res) => {
-    res.send('¡API de Webhook BLiP funcionando!');
+    let html = '<h2>¡API de Webhook BLiP funcionando!</h2>';
+    html += '<h3>Últimos webhooks recibidos:</h3>';
+    if (webhooksRecibidos.length === 0) {
+        html += '<p>No se ha recibido ningún webhook aún.</p>';
+    } else {
+        html += '<ul>';
+        webhooksRecibidos.slice(-10).reverse().forEach((wh, i) => {
+            html += `<li><b>${wh.fecha}</b><pre>${JSON.stringify(wh.body, null, 2)}</pre></li>`;
+        });
+        html += '</ul>';
+    }
+    res.send(html);
 });
 
-// Ruta para recibir el webhook
-app.post('/webhook', handleWebhook);
+// Ruta para recibir el webhook y guardar en memoria
+app.post('/webhook', (req, res) => {
+    webhooksRecibidos.push({
+        fecha: new Date().toISOString(),
+        body: req.body
+    });
+    handleWebhook(req, res);
+});
 
 // Ruta para consolidar archivos CSV por tipo
 app.post('/consolidar/:tipo', consolidarArchivos);
