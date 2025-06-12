@@ -1,4 +1,4 @@
-const { consolidarArchivos } = require('../../controllers/webhookController');
+const { consolidarArchivos } = require('../controllers/webhookController');
 
 module.exports = async (req, res) => {
     // Configurar CORS
