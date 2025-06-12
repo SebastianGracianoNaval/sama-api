@@ -1,6 +1,6 @@
 const { handleWebhook } = require('../controllers/webhookController');
 
-module.exports = async (req, res) => {
+module.exports = (req, res) => {
     // Configurar CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,22 +17,12 @@ module.exports = async (req, res) => {
     }
 
     // Solo permitir POST
-    if (req.method !== 'POST') {
-        return res.status(405).json({
+    if (req.method === 'POST') {
+        handleWebhook(req, res);
+    } else {
+        res.status(405).json({
             success: false,
             message: 'Método no permitido'
-        });
-    }
-
-    try {
-        // Procesar el webhook
-        await handleWebhook(req, res);
-    } catch (error) {
-        console.error('Error en el webhook:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error al procesar el webhook',
-            error: error.message
         });
     }
 }; 
