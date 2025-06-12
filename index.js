@@ -4,7 +4,11 @@ require('dotenv').config();
 // Importar las dependencias
 const express = require('express');
 const bodyParser = require('body-parser');
+const path = require('path');
+const fs = require('fs');
 const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
+const { obtenerRutaCarpeta } = require('./utils/blipUtils');
+const { consolidarCsvs } = require('./utils/csvUtils');
 
 // Crear una aplicación Express
 const app = express();
@@ -28,7 +32,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Página principal que muestra los últimos webhooks recibidos
+// Página principal que muestra los últimos webhooks recibidos y los botones de descarga
 app.get('/', (req, res) => {
     let html = '<h2>¡API de Webhook BLiP funcionando!</h2>';
     html += '<h3>Últimos webhooks recibidos:</h3>';
@@ -41,6 +45,10 @@ app.get('/', (req, res) => {
         });
         html += '</ul>';
     }
+    html += `<h3>Descargar reportes consolidados:</h3>
+        <form method="GET" action="/descargar/mensajes"><button type="submit">Mensajes</button></form>
+        <form method="GET" action="/descargar/contactos"><button type="submit">Contactos</button></form>
+        <form method="GET" action="/descargar/eventos"><button type="submit">Eventos</button></form>`;
     res.send(html);
 });
 
@@ -55,6 +63,42 @@ app.post('/webhook', (req, res) => {
 
 // Ruta para consolidar archivos CSV por tipo
 app.post('/consolidar/:tipo', consolidarArchivos);
+
+// Rutas para descargar los CSV consolidados
+app.get('/descargar/mensajes', async (req, res) => {
+    await descargarCsvConsolidado('mensaje', res);
+});
+
+app.get('/descargar/contactos', async (req, res) => {
+    await descargarCsvConsolidado('contacto', res);
+});
+
+app.get('/descargar/eventos', async (req, res) => {
+    await descargarCsvConsolidado('evento', res);
+});
+
+// Función auxiliar para consolidar y enviar el CSV
+async function descargarCsvConsolidado(tipo, res) {
+    try {
+        const carpeta = obtenerRutaCarpeta(tipo);
+        if (!carpeta) {
+            return res.status(400).send('Tipo de datos inválido');
+        }
+        const ruta = path.join(__dirname, carpeta);
+        const rutaCsv = await consolidarCsvs(ruta, tipo);
+        const nombreArchivo = path.basename(rutaCsv);
+        res.download(rutaCsv, nombreArchivo, (err) => {
+            if (err) {
+                res.status(500).send('Error al descargar el archivo');
+            } else {
+                // Opcional: eliminar el archivo después de descargar
+                // fs.unlinkSync(rutaCsv);
+            }
+        });
+    } catch (error) {
+        res.status(500).send('No hay datos para consolidar o error al generar el archivo.');
+    }
+}
 
 // Iniciar el servidor
 app.listen(PORT, () => {
