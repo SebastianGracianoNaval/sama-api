@@ -1,23 +1,23 @@
 {
-  "name": "sama-api",
+  "name": "sama-node",
   "version": "1.0.0",
-  "description": "API de Webhooks para BLiP",
   "main": "index.js",
   "scripts": {
-    "dev": "vercel dev",
-    "build": "vercel build",
-    "start": "vercel start"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "description": "",
   "dependencies": {
-    "body-parser": "^1.19.0",
-    "dotenv": "^10.0.0",
-    "express": "^4.17.1",
-    "json2csv": "^5.0.7"
+    "body-parser": "^2.2.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "json2csv": "^6.0.0-alpha.2"
   },
   "devDependencies": {
-    "vercel": "^28.0.0"
+    "nodemon": "^3.1.10"
   }
 }
