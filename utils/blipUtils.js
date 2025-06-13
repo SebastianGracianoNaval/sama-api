@@ -18,6 +18,11 @@ const identificarTipoJson = (jsonData) => {
         }
     }
 
+    // Verificar si es un flujo (category y action)
+    if (jsonData.category && jsonData.action) {
+        return 'flujo';
+    }
+
     // Verificar si es un evento
     if (jsonData.category && typeof jsonData.category === 'string') {
         const tiposEvento = ['Possui cadastro', 'flow'];
