@@ -46,7 +46,6 @@ const handleWebhook = async (req, res) => {
             return fecha.slice(0, 10); // yyyy-mm-dd
         }
         function addFechaFiltro(obj) {
-            // Agrega fechaFiltro ANTES de aplanar
             const fechaFiltro = obtenerFechaFiltro(obj);
             const objWithFecha = { ...obj, fechaFiltro };
             const flat = flattenObject(objWithFecha);
@@ -58,7 +57,8 @@ const handleWebhook = async (req, res) => {
         } else {
             dataConFechaFiltro = [addFechaFiltro(jsonData)];
         }
-
+        // Log de los objetos planos antes de convertir a CSV
+        console.log('Objetos planos para CSV:', JSON.stringify(dataConFechaFiltro, null, 2));
         // Convertir JSON a CSV (siempre como array de objetos planos)
         const tipo = identificarTipoJson(jsonData);
         if (!tipo) {
@@ -71,6 +71,10 @@ const handleWebhook = async (req, res) => {
         const nombreArchivo = generarNombreArchivo(tipo);
         const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
         await convertJsonToCsv(dataConFechaFiltro, outputPath);
+        // Log del header del CSV generado
+        const fs = require('fs');
+        const csvLines = fs.readFileSync(outputPath, 'utf-8').split('\n');
+        console.log('Header del CSV generado:', csvLines[0]);
 
         res.status(200).json({
             success: true,
