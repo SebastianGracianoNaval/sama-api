@@ -123,7 +123,19 @@ const consolidarArchivos = async (req, res) => {
         }
         const pathCarpeta = path.join(__dirname, '..', carpeta);
         const fs = require('fs');
+        if (!fs.existsSync(pathCarpeta)) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontró el directorio de datos.'
+            });
+        }
         const archivos = fs.readdirSync(pathCarpeta).filter(archivo => archivo.endsWith('.csv'));
+        if (archivos.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No hay archivos CSV para consolidar.'
+            });
+        }
         let datosCombinados = [];
         let encabezados = null;
         for (const archivo of archivos) {
@@ -156,7 +168,6 @@ const consolidarArchivos = async (req, res) => {
                 message: usarFiltroFechas ? 'No hay datos para el rango de fechas seleccionado.' : 'No hay datos para consolidar.'
             });
         }
-        // Crear archivo consolidado
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const carpetaReportes = path.join(path.dirname(pathCarpeta), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
