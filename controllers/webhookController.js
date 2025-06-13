@@ -96,6 +96,7 @@ const consolidarArchivos = async (req, res) => {
     try {
         const { tipo } = req.params;
         const { fechaInicio, fechaFin } = req.query;
+        console.log('[consolidarArchivos] tipo:', tipo, 'fechaInicio:', fechaInicio, 'fechaFin:', fechaFin);
         const carpeta = obtenerRutaCarpeta(tipo);
         if (!carpeta) {
             return res.status(500).json({
@@ -154,8 +155,12 @@ const consolidarArchivos = async (req, res) => {
                 if (usarFiltroFechas && fechaIndex !== -1) {
                     const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
                     const fecha = valores[fechaIndex];
+                    console.log(`[Filtro] fechaFiltro en línea: '${fecha}', comparando con inicio: '${fechaInicio}', fin: '${fechaFin}'`);
                     if (fecha && fecha >= fechaInicio && fecha <= fechaFin) {
+                        console.log(`[Filtro] Línea incluida`);
                         datosCombinados.push(linea);
+                    } else {
+                        console.log(`[Filtro] Línea descartada`);
                     }
                 } else {
                     datosCombinados.push(linea);
@@ -163,6 +168,7 @@ const consolidarArchivos = async (req, res) => {
             }
         }
         if (datosCombinados.length <= 1) {
+            console.log('[Filtro] No hay datos después del filtrado.');
             return res.status(404).json({
                 success: false,
                 message: usarFiltroFechas ? 'No hay datos para el rango de fechas seleccionado.' : 'No hay datos para consolidar.'

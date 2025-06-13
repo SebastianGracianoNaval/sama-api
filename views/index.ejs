@@ -124,23 +124,24 @@ function descargarConAlerta(link, event) {
     }
     console.log('URL de la petición:', url.toString());
     fetch(url, { method: 'GET' })
-        .then(response => {
+        .then(async response => {
             console.log('Respuesta del servidor:', response.status, response.statusText);
-            if (response.status === 404) {
-                console.log('Error 404: No hay datos para el rango de fechas seleccionado.');
-                mostrarToastExportacion('No hay datos para el rango de fechas seleccionado.');
-                return null;
-            }
-            if (response.status === 400) {
-                response.text().then(msg => {
-                    console.log('Error 400:', msg);
-                    mostrarToastExportacion(msg);
-                });
-                return null;
-            }
             if (!response.ok) {
-                console.log('Error general:', response.statusText);
-                mostrarToastExportacion('Error al descargar el archivo.');
+                // Intentar extraer mensaje de error del backend (JSON o texto)
+                let msg = 'Error al descargar el archivo.';
+                try {
+                    const contentType = response.headers.get('Content-Type') || '';
+                    if (contentType.includes('application/json')) {
+                        const data = await response.json();
+                        msg = data.message || msg;
+                    } else {
+                        const text = await response.text();
+                        if (text && text.length < 200) msg = text;
+                    }
+                } catch (e) {
+                    // Si falla, usar mensaje genérico
+                }
+                mostrarToastExportacion(msg);
                 return null;
             }
             // Obtener el nombre del archivo del header
