@@ -16,9 +16,8 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
         // Aplanar todos los objetos y asegurar que todos tengan fechaFiltro
         const flattenedData = dataArray.map(obj => {
             const flat = flattenObject(obj);
-            if (!('fechaFiltro' in flat) && obj.fechaFiltro) {
-                flat['fechaFiltro'] = obj.fechaFiltro;
-            }
+            // Forzar que fechaFiltro esté presente y al final
+            flat['fechaFiltro'] = obj['fechaFiltro'] || '';
             return flat;
         });
 
@@ -29,9 +28,11 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
         });
 
         // Convertir Set a Array y asegurarnos que fechaFiltro esté al final
-        const fieldsArray = Array.from(fields);
-        if (fieldsArray.includes('fechaFiltro')) {
-            fieldsArray.splice(fieldsArray.indexOf('fechaFiltro'), 1);
+        let fieldsArray = Array.from(fields);
+        if (!fieldsArray.includes('fechaFiltro')) {
+            fieldsArray.push('fechaFiltro');
+        } else {
+            fieldsArray = fieldsArray.filter(f => f !== 'fechaFiltro');
             fieldsArray.push('fechaFiltro');
         }
 
