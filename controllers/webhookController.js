@@ -117,7 +117,12 @@ const consolidarArchivos = async (req, res) => {
         const { tipo } = req.params;
         const { fechaInicio, fechaFin } = req.query;
 
+        console.log('[DEBUG] Endpoint consolidarArchivos llamado');
+        console.log('[DEBUG] Tipo:', tipo);
+        console.log('[DEBUG] Query params:', req.query);
+
         if (!['mensaje', 'evento', 'contacto'].includes(tipo)) {
+            console.log('[DEBUG] Tipo de datos inválido:', tipo);
             return res.status(400).json({
                 success: false,
                 message: 'Tipo de datos inválido'
@@ -126,6 +131,7 @@ const consolidarArchivos = async (req, res) => {
 
         const carpeta = obtenerRutaCarpeta(tipo);
         if (!carpeta) {
+            console.log('[DEBUG] No se pudo determinar la carpeta para tipo:', tipo);
             return res.status(500).json({
                 success: false,
                 message: 'Error al determinar la carpeta de destino'
@@ -139,45 +145,59 @@ const consolidarArchivos = async (req, res) => {
                 inicio: new Date(fechaInicio),
                 fin: new Date(fechaFin)
             };
+            console.log('[DEBUG] Fechas parseadas:', fechas);
+        } else {
+            console.log('[DEBUG] No se recibieron fechas para filtrar');
         }
 
         // LOGS DE CONSOLIDACION
         const pathCarpeta = path.join(__dirname, '..', carpeta);
         const fs = require('fs');
         const archivos = fs.readdirSync(pathCarpeta).filter(archivo => archivo.endsWith('.csv'));
-        console.log('[Consolidar] Archivos CSV encontrados:', archivos);
+        console.log('[DEBUG] Archivos CSV encontrados:', archivos);
+        if (archivos.length === 0) {
+            console.log('[DEBUG] No hay archivos CSV para consolidar');
+        }
         if (fechas) {
-            console.log('[Consolidar] Fechas para filtrar:', fechas);
+            console.log('[DEBUG] Fechas para filtrar:', fechas);
         }
 
-        const rutaConsolidada = await consolidarCsvs(
-            pathCarpeta,
-            tipo,
-            fechas
-        );
-        console.log('[Consolidar] Archivo consolidado generado:', rutaConsolidada);
+        try {
+            const rutaConsolidada = await consolidarCsvs(
+                pathCarpeta,
+                tipo,
+                fechas
+            );
+            console.log('[DEBUG] Archivo consolidado generado:', rutaConsolidada);
 
-        res.status(200).json({
-            success: true,
-            message: 'Archivos consolidados correctamente',
-            filePath: rutaConsolidada
-        });
+            res.status(200).json({
+                success: true,
+                message: 'Archivos consolidados correctamente',
+                filePath: rutaConsolidada
+            });
+        } catch (errorConsolidar) {
+            console.error('[DEBUG] Error en consolidarCsvs:', errorConsolidar.message);
+            if (errorConsolidar.message === 'No hay datos para el período especificado') {
+                return res.status(404).json({
+                    success: false,
+                    message: 'No hay datos para el período especificado'
+                });
+            }
+            if (errorConsolidar.message === 'No hay archivos CSV para consolidar') {
+                return res.status(404).json({
+                    success: false,
+                    message: 'No hay archivos para consolidar'
+                });
+            }
+            return res.status(500).json({
+                success: false,
+                message: 'Error al consolidar los archivos',
+                error: errorConsolidar.message
+            });
+        }
 
     } catch (error) {
-        console.error('Error al consolidar archivos:', error);
-        // Manejar errores específicos
-        if (error.message === 'No hay datos para el período especificado') {
-            return res.status(404).json({
-                success: false,
-                message: 'No hay datos para el período especificado'
-            });
-        }
-        if (error.message === 'No hay archivos CSV para consolidar') {
-            return res.status(404).json({
-                success: false,
-                message: 'No hay archivos para consolidar'
-            });
-        }
+        console.error('[DEBUG] Error general en consolidarArchivos:', error);
         res.status(500).json({
             success: false,
             message: 'Error al consolidar los archivos',
