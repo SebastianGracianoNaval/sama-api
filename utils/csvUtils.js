@@ -186,5 +186,6 @@ function flattenObject(obj, prefix = '') {
 
 module.exports = {
     convertJsonToCsv,
-    consolidarCsvs
+    consolidarCsvs,
+    flattenObject
 }; 
