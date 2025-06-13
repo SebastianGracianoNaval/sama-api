@@ -46,8 +46,10 @@ const handleWebhook = async (req, res) => {
             return fecha.slice(0, 10); // yyyy-mm-dd
         }
         function addFechaFiltro(obj) {
-            const flat = flattenObject(obj);
-            flat['fechaFiltro'] = obtenerFechaFiltro(obj);
+            // Agrega fechaFiltro ANTES de aplanar
+            const fechaFiltro = obtenerFechaFiltro(obj);
+            const objWithFecha = { ...obj, fechaFiltro };
+            const flat = flattenObject(objWithFecha);
             return flat;
         }
         let dataConFechaFiltro;
