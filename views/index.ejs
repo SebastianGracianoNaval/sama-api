@@ -2,10 +2,25 @@
     <div class="col-12">
         <div class="descarga-reportes mb-4">
             <h2>Descargar reportes consolidados</h2>
-            <!-- Alerta de exportación -->
-            <div id="alertaExportacion" class="alert alert-danger" style="display:none;" role="alert">
-              No hay datos para exportar.
+            <!-- Alerta de exportación mejorada -->
+            <div id="alertaExportacion" class="alert alert-danger d-flex align-items-center" style="display:none;" role="alert">
+              <i class="bi bi-exclamation-triangle-fill me-2" style="font-size:1.5rem;"></i>
+              <span id="textoAlertaExportacion">No hay datos para exportar.</span>
             </div>
+            <!-- Filtros de fecha -->
+            <form class="row g-2 align-items-end mb-3" onsubmit="return false;">
+                <div class="col-auto">
+                    <label for="fechaInicio" class="form-label mb-0">Fecha inicio</label>
+                    <input type="date" class="form-control" id="fechaInicio" max="<%= new Date().toISOString().slice(0,10) %>">
+                </div>
+                <div class="col-auto">
+                    <label for="fechaFin" class="form-label mb-0">Fecha fin</label>
+                    <input type="date" class="form-control" id="fechaFin" max="<%= new Date().toISOString().slice(0,10) %>">
+                </div>
+                <div class="col-auto">
+                    <button type="button" class="btn btn-secondary" onclick="limpiarFechas()">Limpiar</button>
+                </div>
+            </form>
             <!-- Botones de descarga -->
             <div class="btn-group" role="group">
                 <a href="/descargar/mensajes" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Mensajes</a>
@@ -51,23 +66,51 @@
 </div>
 
 <script>
-function mostrarAlertaExportacion() {
+function mostrarAlertaExportacion(msg) {
     const alerta = document.getElementById('alertaExportacion');
-    alerta.style.display = 'block';
+    const texto = document.getElementById('textoAlertaExportacion');
+    texto.textContent = msg || 'No hay datos para exportar.';
+    alerta.style.display = 'flex';
     setTimeout(() => {
         alerta.style.display = 'none';
     }, 4000);
 }
+function limpiarFechas() {
+    document.getElementById('fechaInicio').value = '';
+    document.getElementById('fechaFin').value = '';
+}
 function descargarConAlerta(link, event) {
     event.preventDefault();
-    fetch(link.href, { method: 'GET' })
+    const fechaInicio = document.getElementById('fechaInicio').value;
+    const fechaFin = document.getElementById('fechaFin').value;
+    const hoy = new Date().toISOString().slice(0,10);
+    // Validación frontend
+    if ((fechaInicio && fechaFin) && (fechaInicio > fechaFin)) {
+        mostrarAlertaExportacion('La fecha de inicio no puede ser posterior a la fecha fin.');
+        return false;
+    }
+    if ((fechaInicio && fechaInicio > hoy) || (fechaFin && fechaFin > hoy)) {
+        mostrarAlertaExportacion('No se pueden seleccionar fechas futuras.');
+        return false;
+    }
+    // Construir la URL con los parámetros de fecha si están presentes
+    const url = new URL(link.href, window.location.origin);
+    if (fechaInicio && fechaFin) {
+        url.searchParams.set('fechaInicio', fechaInicio);
+        url.searchParams.set('fechaFin', fechaFin);
+    }
+    fetch(url, { method: 'GET' })
         .then(response => {
             if (response.status === 404) {
-                mostrarAlertaExportacion();
+                mostrarAlertaExportacion('No hay datos para el rango de fechas seleccionado.');
+                return null;
+            }
+            if (response.status === 400) {
+                response.text().then(msg => mostrarAlertaExportacion(msg));
                 return null;
             }
             if (!response.ok) {
-                alert('Error al descargar el archivo.');
+                mostrarAlertaExportacion('Error al descargar el archivo.');
                 return null;
             }
             // Obtener el nombre del archivo del header
