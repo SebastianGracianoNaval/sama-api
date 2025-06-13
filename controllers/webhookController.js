@@ -96,7 +96,7 @@ const consolidarArchivos = async (req, res) => {
     try {
         const { tipo } = req.params;
         const { fechaInicio, fechaFin } = req.query;
-        console.log('[consolidarArchivos] tipo:', tipo, 'fechaInicio:', fechaInicio, 'fechaFin:', fechaFin);
+        console.log('[consolidarArchivos] tipo:', tipo, 'fechaInicio:', fechaInicio, typeof fechaInicio, 'fechaFin:', fechaFin, typeof fechaFin);
         const carpeta = obtenerRutaCarpeta(tipo);
         if (!carpeta) {
             return res.status(500).json({
@@ -139,6 +139,8 @@ const consolidarArchivos = async (req, res) => {
         }
         let datosCombinados = [];
         let encabezados = null;
+        let incluidas = 0;
+        let descartadas = 0;
         for (const archivo of archivos) {
             const rutaArchivo = path.join(pathCarpeta, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
@@ -155,18 +157,21 @@ const consolidarArchivos = async (req, res) => {
                 if (usarFiltroFechas && fechaIndex !== -1) {
                     const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
                     const fecha = valores[fechaIndex];
-                    console.log(`[Filtro] fechaFiltro en línea: '${fecha}', comparando con inicio: '${fechaInicio}', fin: '${fechaFin}'`);
-                    if (fecha && fecha >= fechaInicio && fecha <= fechaFin) {
-                        console.log(`[Filtro] Línea incluida`);
+                    console.log(`[Filtro] fechaFiltro en línea: '${fecha}' (${typeof fecha}), comparando con inicio: '${fechaInicio}' (${typeof fechaInicio}), fin: '${fechaFin}' (${typeof fechaFin})`);
+                    const entra = fecha && fecha >= fechaInicio && fecha <= fechaFin;
+                    console.log(`[Filtro] Comparación: ${fecha} >= ${fechaInicio} && ${fecha} <= ${fechaFin} => ${entra}`);
+                    if (entra) {
+                        incluidas++;
                         datosCombinados.push(linea);
                     } else {
-                        console.log(`[Filtro] Línea descartada`);
+                        descartadas++;
                     }
                 } else {
                     datosCombinados.push(linea);
                 }
             }
         }
+        console.log(`[Filtro] Líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
         if (datosCombinados.length <= 1) {
             console.log('[Filtro] No hay datos después del filtrado.');
             return res.status(404).json({
