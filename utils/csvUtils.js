@@ -10,8 +10,17 @@ const path = require('path');
  */
 const convertJsonToCsv = async (jsonData, outputPath) => {
     try {
-        // Crear el parser con las opciones por defecto
-        const parser = new Parser();
+        // Obtener todos los campos únicos de todos los objetos
+        const fields = new Set();
+        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+        dataArray.forEach(obj => {
+            Object.keys(obj).forEach(key => fields.add(key));
+        });
+
+        // Crear el parser con los campos explícitos
+        const parser = new Parser({
+            fields: Array.from(fields)
+        });
         
         // Convertir el JSON a CSV
         const csv = parser.parse(jsonData);
