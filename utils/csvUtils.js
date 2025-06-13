@@ -10,20 +10,37 @@ const path = require('path');
  */
 const convertJsonToCsv = async (jsonData, outputPath) => {
     try {
+        // Asegurarnos que jsonData sea un array
+        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+
         // Obtener todos los campos únicos de todos los objetos
         const fields = new Set();
-        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
         dataArray.forEach(obj => {
             Object.keys(obj).forEach(key => fields.add(key));
         });
 
-        // Crear el parser con los campos explícitos
+        // Convertir Set a Array y asegurarnos que fechaFiltro esté al final
+        const fieldsArray = Array.from(fields);
+        if (fieldsArray.includes('fechaFiltro')) {
+            fieldsArray.splice(fieldsArray.indexOf('fechaFiltro'), 1);
+            fieldsArray.push('fechaFiltro');
+        }
+
+        // Crear el parser con los campos explícitos y opciones adicionales
         const parser = new Parser({
-            fields: Array.from(fields)
+            fields: fieldsArray,
+            header: true,
+            quote: '"',
+            delimiter: ',',
+            eol: '\n',
+            // Asegurarnos que los valores nulos o undefined se manejen correctamente
+            defaultValue: '',
+            // Mantener el orden de las columnas
+            preserveOrder: true
         });
         
         // Convertir el JSON a CSV
-        const csv = parser.parse(jsonData);
+        const csv = parser.parse(dataArray);
         
         // Asegurarse de que el directorio existe
         const dir = path.dirname(outputPath);
@@ -69,12 +86,13 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
             .filter(archivo => archivo.endsWith('.csv'));
 
         if (archivos.length === 0) {
-            return null; // No hay archivos para consolidar
+            throw new Error('No hay archivos CSV para consolidar');
         }
 
         // Leer y combinar todos los archivos
         let datosCombinados = [];
         let encabezados = null;
+        let datosFiltrados = false;
 
         for (const archivo of archivos) {
             const rutaArchivo = path.join(directorio, archivo);
@@ -94,16 +112,18 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
 
                 // Si hay fechas para filtrar, verificar si la línea está en el rango
                 if (fechas) {
-                    // Buscar la columna 'fechaFiltro' exactamente
-                    const columnas = encabezados.split(',');
-                    const fechaIndex = columnas.findIndex(col => col.trim() === 'fechaFiltro');
+                    // Buscar la columna 'fechaFiltro'
+                    const columnas = encabezados.split(',').map(col => col.trim());
+                    const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
 
                     if (fechaIndex !== -1) {
-                        // Soportar comas dentro de comillas
-                        const valores = linea.match(/\s*("[^"]*"|[^,]*)\s*/g).map(v => v.replace(/^\s*|\s*$/g, ''));
-                        if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex].replace(/"/g, ''), fechas)) {
+                        // Parsear la línea CSV correctamente
+                        const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                        
+                        if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex], fechas)) {
                             continue; // Saltar esta línea si no está en el rango de fechas
                         }
+                        datosFiltrados = true;
                     }
                 }
 
@@ -111,9 +131,14 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
             }
         }
 
-        // Si no hay datos después del filtrado, retornar null
+        // Si no hay datos después del filtrado, lanzar error
         if (datosCombinados.length <= 1) {
-            return null;
+            throw new Error('No hay datos para el período especificado');
+        }
+
+        // Si hay fechas pero no se encontraron datos en ese rango
+        if (fechas && !datosFiltrados) {
+            throw new Error('No hay datos para el período especificado');
         }
 
         // Eliminar líneas duplicadas
@@ -133,7 +158,7 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
 
         return rutaConsolidada;
     } catch (error) {
-        throw new Error(`Error al consolidar archivos CSV: ${error.message}`);
+        throw error; // Propagar el error para manejarlo en el controlador
     }
 };
 

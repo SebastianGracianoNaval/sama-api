@@ -114,6 +114,7 @@ const handleWebhook = async (req, res) => {
 const consolidarArchivos = async (req, res) => {
     try {
         const { tipo } = req.params;
+        const { fechaInicio, fechaFin } = req.query;
 
         if (!['mensaje', 'evento', 'contacto'].includes(tipo)) {
             return res.status(400).json({
@@ -130,9 +131,19 @@ const consolidarArchivos = async (req, res) => {
             });
         }
 
+        // Convertir fechas si existen
+        let fechas = null;
+        if (fechaInicio && fechaFin) {
+            fechas = {
+                inicio: new Date(fechaInicio),
+                fin: new Date(fechaFin)
+            };
+        }
+
         const rutaConsolidada = await consolidarCsvs(
             path.join(__dirname, '..', carpeta),
-            tipo
+            tipo,
+            fechas
         );
 
         res.status(200).json({
@@ -143,6 +154,22 @@ const consolidarArchivos = async (req, res) => {
 
     } catch (error) {
         console.error('Error al consolidar archivos:', error);
+        
+        // Manejar errores específicos
+        if (error.message === 'No hay datos para el período especificado') {
+            return res.status(404).json({
+                success: false,
+                message: 'No hay datos para el período especificado'
+            });
+        }
+        
+        if (error.message === 'No hay archivos CSV para consolidar') {
+            return res.status(404).json({
+                success: false,
+                message: 'No hay archivos para consolidar'
+            });
+        }
+
         res.status(500).json({
             success: false,
             message: 'Error al consolidar los archivos',
