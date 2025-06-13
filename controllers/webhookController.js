@@ -40,16 +40,22 @@ const handleWebhook = async (req, res) => {
         const nombreArchivo = generarNombreArchivo(tipo);
         const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
 
-        // Agregar el campo 'fechaFiltro' al JSON antes de convertirlo a CSV
+        // Agregar el campo 'fechaFiltro' al final de cada objeto antes de convertirlo a CSV
         const fechaFiltro = new Date().toISOString();
         let dataConFechaFiltro;
+        function addFechaFiltro(obj) {
+            const entries = Object.entries(obj);
+            // Eliminar si ya existe
+            const filtered = entries.filter(([key]) => key !== 'fechaFiltro');
+            return Object.fromEntries([...filtered, ['fechaFiltro', fechaFiltro]]);
+        }
         if (Array.isArray(jsonData)) {
-            dataConFechaFiltro = jsonData.map(item => ({ ...item, fechaFiltro }));
+            dataConFechaFiltro = jsonData.map(item => addFechaFiltro(item));
         } else {
-            dataConFechaFiltro = [{ ...jsonData, fechaFiltro }]; // Siempre como array para consistencia
+            dataConFechaFiltro = [addFechaFiltro(jsonData)];
         }
 
-        // Convertir JSON a CSV
+        // Convertir JSON a CSV (siempre como array de objetos planos)
         const csvPath = await convertJsonToCsv(dataConFechaFiltro, outputPath);
 
         res.status(200).json({
