@@ -67,8 +67,17 @@
 <script>
 function toDDMMYYYY(dateStr) {
     if (!dateStr) return '';
-    const [yyyy, mm, dd] = dateStr.split('-');
-    return `${dd}/${mm}/${yyyy}`;
+    // Si el valor es yyyy-mm-dd
+    if (dateStr.includes('-')) {
+        const [yyyy, mm, dd] = dateStr.split('-');
+        return `${dd}/${mm}/${yyyy}`;
+    }
+    // Si el valor es mm/dd/yyyy (por error)
+    if (dateStr.includes('/')) {
+        const [mm, dd, yyyy] = dateStr.split('/');
+        return `${dd}/${mm}/${yyyy}`;
+    }
+    return dateStr;
 }
 function descargarConFiltro(link, event) {
     const fechaInicioRaw = document.getElementById('fechaInicio').value;
