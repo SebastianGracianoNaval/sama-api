@@ -108,7 +108,6 @@ const handleWebhook = async (req, res) => {
 const consolidarArchivos = async (req, res) => {
     try {
         const { tipo } = req.params;
-        const { fechaInicio, fechaFin } = req.query;
         const carpeta = obtenerRutaCarpeta(tipo);
         if (!carpeta) {
             return res.status(500).json({
@@ -119,14 +118,8 @@ const consolidarArchivos = async (req, res) => {
         const pathCarpeta = path.join(__dirname, '..', carpeta);
         const fs = require('fs');
         const archivos = fs.readdirSync(pathCarpeta).filter(archivo => archivo.endsWith('.csv'));
-        let filasFiltradas = 0;
-        let filasTotales = 0;
         let datosCombinados = [];
         let encabezados = null;
-        // LOG: Filtros recibidos
-        if (fechaInicio && fechaFin) {
-            console.log(`[CONSOLIDAR] Filtrando por fechas: ${fechaInicio} a ${fechaFin}`);
-        }
         for (const archivo of archivos) {
             const rutaArchivo = path.join(pathCarpeta, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
@@ -135,31 +128,16 @@ const consolidarArchivos = async (req, res) => {
                 encabezados = lineas[0];
                 datosCombinados.push(encabezados);
             }
-            const columnas = encabezados.split(',').map(col => col.trim());
-            const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
                 if (!linea) continue;
-                filasTotales++;
-                if (fechaInicio && fechaFin && fechaIndex !== -1) {
-                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    const fecha = valores[fechaIndex];
-                    if (fecha && fecha >= fechaInicio && fecha <= fechaFin) {
-                        datosCombinados.push(linea);
-                        filasFiltradas++;
-                    }
-                } else {
-                    datosCombinados.push(linea);
-                    filasFiltradas++;
-                }
+                datosCombinados.push(linea);
             }
         }
-        // LOG: Cuántas filas pasan el filtro
-        console.log(`[CONSOLIDAR] Filas filtradas: ${filasFiltradas} de ${filasTotales}`);
         if (datosCombinados.length <= 1) {
             return res.status(404).json({
                 success: false,
-                message: 'No hay datos para el período especificado'
+                message: 'No hay datos para consolidar'
             });
         }
         // Crear archivo consolidado

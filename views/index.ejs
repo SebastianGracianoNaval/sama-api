@@ -3,29 +3,12 @@
         <div class="descarga-reportes mb-4">
             <h2>Descargar reportes consolidados</h2>
             
-            <!-- Formulario de filtro de fechas -->
-            <form id="filtroFechas" class="mb-3">
-                <div class="row align-items-end">
-                    <div class="col-md-4">
-                        <label for="fechaInicio" class="form-label">Fecha Inicio</label>
-                        <input type="date" class="form-control" id="fechaInicio" name="fechaInicio" max="<%= new Date().toISOString().split('T')[0] %>">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="fechaFin" class="form-label">Fecha Fin</label>
-                        <input type="date" class="form-control" id="fechaFin" name="fechaFin" max="<%= new Date().toISOString().split('T')[0] %>">
-                    </div>
-                    <div class="col-md-4">
-                        <button type="button" class="btn btn-secondary" onclick="limpiarFechas()">Limpiar Filtros</button>
-                    </div>
-                </div>
-            </form>
-
             <!-- Botones de descarga -->
             <div class="btn-group" role="group">
-                <a href="/descargar/mensajes" class="btn btn-success" onclick="return descargarConFiltro(this, event)">Mensajes</a>
-                <a href="/descargar/contactos" class="btn btn-success" onclick="return descargarConFiltro(this, event)">Contactos</a>
-                <a href="/descargar/eventos" class="btn btn-success" onclick="return descargarConFiltro(this, event)">Eventos</a>
-                <a href="/descargar/todo" class="btn btn-primary" onclick="return descargarConFiltro(this, event)">TODO</a>
+                <a href="/descargar/mensajes" class="btn btn-success">Mensajes</a>
+                <a href="/descargar/contactos" class="btn btn-success">Contactos</a>
+                <a href="/descargar/eventos" class="btn btn-success">Eventos</a>
+                <a href="/descargar/todo" class="btn btn-primary">TODO</a>
             </div>
         </div>
 
@@ -65,78 +48,5 @@
 </div>
 
 <script>
-function descargarConFiltro(link, event) {
-    const fechaInicio = document.getElementById('fechaInicio').value;
-    const fechaFin = document.getElementById('fechaFin').value;
-    if (fechaInicio && fechaFin) {
-        event.preventDefault();
-        const url = new URL(link.href, window.location.origin);
-        url.searchParams.set('fechaInicio', fechaInicio);
-        url.searchParams.set('fechaFin', fechaFin);
-        fetch(url, { method: 'GET' })
-            .then(response => {
-                if (response.status === 404) {
-                    alert('No hay datos para esas fechas.');
-                    return null;
-                }
-                if (!response.ok) {
-                    alert('Error al descargar el archivo.');
-                    return null;
-                }
-                // Obtener el nombre del archivo del header
-                const disposition = response.headers.get('Content-Disposition');
-                let filename = 'reporte.csv';
-                if (disposition && disposition.indexOf('filename=') !== -1) {
-                    filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
-                }
-                return response.blob().then(blob => ({ blob, filename }));
-            })
-            .then(data => {
-                if (data) {
-                    const urlBlob = window.URL.createObjectURL(data.blob);
-                    const a = document.createElement('a');
-                    a.href = urlBlob;
-                    a.download = data.filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(urlBlob);
-                }
-            });
-        return false;
-    }
-    // Si no hay filtro, descarga normal
-    return true;
-}
-
-function limpiarFechas() {
-    document.getElementById('fechaInicio').value = '';
-    document.getElementById('fechaFin').value = '';
-}
-
-// Validación de fechas en tiempo real
-document.getElementById('fechaInicio').addEventListener('change', validarFechas);
-document.getElementById('fechaFin').addEventListener('change', validarFechas);
-
-function validarFechas() {
-    const fechaInicio = document.getElementById('fechaInicio').value;
-    const fechaFin = document.getElementById('fechaFin').value;
-    const hoy = new Date().toISOString().split('T')[0];
-    
-    if (fechaInicio && fechaFin) {
-        if (fechaInicio > fechaFin) {
-            alert('La fecha de inicio no puede ser posterior a la fecha fin');
-            document.getElementById('fechaInicio').value = '';
-            document.getElementById('fechaFin').value = '';
-            return;
-        }
-        
-        if (fechaInicio > hoy || fechaFin > hoy) {
-            alert('No se pueden seleccionar fechas futuras');
-            document.getElementById('fechaInicio').value = '';
-            document.getElementById('fechaFin').value = '';
-            return;
-        }
-    }
-}
+// Eliminar funciones de filtro y validación de fechas
 </script> 
