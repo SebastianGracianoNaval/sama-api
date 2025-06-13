@@ -104,12 +104,15 @@ function descargarConAlerta(link, event) {
     const fechaInicio = document.getElementById('fechaInicio').value;
     const fechaFin = document.getElementById('fechaFin').value;
     const hoy = new Date().toISOString().slice(0,10);
+    console.log('Fechas seleccionadas:', { fechaInicio, fechaFin, hoy });
     // Validación frontend
     if ((fechaInicio && fechaFin) && (fechaInicio > fechaFin)) {
+        console.log('Error: La fecha de inicio no puede ser posterior a la fecha fin.');
         mostrarToastExportacion('La fecha de inicio no puede ser posterior a la fecha fin.');
         return false;
     }
     if ((fechaInicio && fechaInicio > hoy) || (fechaFin && fechaFin > hoy)) {
+        console.log('Error: No se pueden seleccionar fechas futuras.');
         mostrarToastExportacion('No se pueden seleccionar fechas futuras.');
         return false;
     }
@@ -119,17 +122,24 @@ function descargarConAlerta(link, event) {
         url.searchParams.set('fechaInicio', fechaInicio);
         url.searchParams.set('fechaFin', fechaFin);
     }
+    console.log('URL de la petición:', url.toString());
     fetch(url, { method: 'GET' })
         .then(response => {
+            console.log('Respuesta del servidor:', response.status, response.statusText);
             if (response.status === 404) {
+                console.log('Error 404: No hay datos para el rango de fechas seleccionado.');
                 mostrarToastExportacion('No hay datos para el rango de fechas seleccionado.');
                 return null;
             }
             if (response.status === 400) {
-                response.text().then(msg => mostrarToastExportacion(msg));
+                response.text().then(msg => {
+                    console.log('Error 400:', msg);
+                    mostrarToastExportacion(msg);
+                });
                 return null;
             }
             if (!response.ok) {
+                console.log('Error general:', response.statusText);
                 mostrarToastExportacion('Error al descargar el archivo.');
                 return null;
             }
@@ -139,6 +149,7 @@ function descargarConAlerta(link, event) {
             if (disposition && disposition.indexOf('filename=') !== -1) {
                 filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
             }
+            console.log('Nombre del archivo:', filename);
             return response.blob().then(blob => ({ blob, filename }));
         })
         .then(data => {
@@ -152,6 +163,10 @@ function descargarConAlerta(link, event) {
                 a.remove();
                 window.URL.revokeObjectURL(urlBlob);
             }
+        })
+        .catch(error => {
+            console.error('Error en la petición:', error);
+            mostrarToastExportacion('Error al procesar la petición.');
         });
     return false;
 }
