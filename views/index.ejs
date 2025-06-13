@@ -65,9 +65,16 @@
 </div>
 
 <script>
+function toDDMMYYYY(dateStr) {
+    if (!dateStr) return '';
+    const [yyyy, mm, dd] = dateStr.split('-');
+    return `${dd}/${mm}/${yyyy}`;
+}
 function descargarConFiltro(link, event) {
-    const fechaInicio = document.getElementById('fechaInicio').value;
-    const fechaFin = document.getElementById('fechaFin').value;
+    const fechaInicioRaw = document.getElementById('fechaInicio').value;
+    const fechaFinRaw = document.getElementById('fechaFin').value;
+    const fechaInicio = toDDMMYYYY(fechaInicioRaw);
+    const fechaFin = toDDMMYYYY(fechaFinRaw);
     if (fechaInicio && fechaFin) {
         event.preventDefault();
         const url = new URL(link.href, window.location.origin);
