@@ -83,17 +83,14 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
 
                 // Si hay fechas para filtrar, verificar si la línea está en el rango
                 if (fechas) {
-                    // Buscar la columna de fecha en los encabezados
+                    // Buscar la columna 'fecha' exactamente
                     const columnas = encabezados.split(',');
-                    const fechaIndex = columnas.findIndex(col => 
-                        col.toLowerCase().includes('fecha') || 
-                        col.toLowerCase().includes('date') ||
-                        col.toLowerCase().includes('timestamp')
-                    );
+                    const fechaIndex = columnas.findIndex(col => col.trim() === 'fecha');
 
                     if (fechaIndex !== -1) {
-                        const valores = linea.split(',');
-                        if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex], fechas)) {
+                        // Soportar comas dentro de comillas
+                        const valores = linea.match(/\s*("[^"]*"|[^,]*)\s*/g).map(v => v.replace(/^\s*|\s*$/g, ''));
+                        if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex].replace(/"/g, ''), fechas)) {
                             continue; // Saltar esta línea si no está en el rango de fechas
                         }
                     }

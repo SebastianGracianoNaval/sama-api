@@ -40,8 +40,16 @@ const handleWebhook = async (req, res) => {
         const nombreArchivo = generarNombreArchivo(tipo);
         const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
 
+        // Agregar el campo 'fecha' al JSON antes de convertirlo a CSV
+        let dataConFecha;
+        if (Array.isArray(jsonData)) {
+            dataConFecha = jsonData.map(item => ({ ...item, fecha: new Date().toISOString() }));
+        } else {
+            dataConFecha = { ...jsonData, fecha: new Date().toISOString() };
+        }
+
         // Convertir JSON a CSV
-        const csvPath = await convertJsonToCsv(jsonData, outputPath);
+        const csvPath = await convertJsonToCsv(dataConFecha, outputPath);
 
         res.status(200).json({
             success: true,
