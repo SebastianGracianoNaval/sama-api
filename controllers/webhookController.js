@@ -20,6 +20,7 @@ const handleWebhook = async (req, res) => {
 
         // Identificar el tipo de JSON
         const tipo = identificarTipoJson(jsonData);
+        console.log('[Webhook] Tipo detectado:', tipo);
         if (!tipo) {
             return res.status(400).json({
                 success: false,
@@ -72,7 +73,9 @@ const handleWebhook = async (req, res) => {
             const dia = String(d.getDate()).padStart(2, '0');
             const mes = String(d.getMonth() + 1).padStart(2, '0');
             const anio = d.getFullYear();
-            return `${dia}/${mes}/${anio}`;
+            const fechaFiltro = `${dia}/${mes}/${anio}`;
+            console.log('[Webhook] fechaFiltro generada:', fechaFiltro);
+            return fechaFiltro;
         }
         function addFechaFiltro(obj) {
             const entries = Object.entries(obj);
@@ -116,6 +119,9 @@ const consolidarArchivos = async (req, res) => {
         const { tipo } = req.params;
         const { fechaInicio, fechaFin } = req.query;
 
+        console.log('[Consolidar] Tipo:', tipo);
+        console.log('[Consolidar] Query fechas:', req.query);
+
         if (!['mensaje', 'evento', 'contacto'].includes(tipo)) {
             return res.status(400).json({
                 success: false,
@@ -124,6 +130,7 @@ const consolidarArchivos = async (req, res) => {
         }
 
         const carpeta = obtenerRutaCarpeta(tipo);
+        console.log('[Consolidar] Carpeta a leer:', carpeta);
         if (!carpeta) {
             return res.status(500).json({
                 success: false,
@@ -138,6 +145,7 @@ const consolidarArchivos = async (req, res) => {
                 inicio: new Date(fechaInicio),
                 fin: new Date(fechaFin)
             };
+            console.log('[Consolidar] Fechas para filtrar:', fechas);
         }
 
         const rutaConsolidada = await consolidarCsvs(
@@ -145,6 +153,7 @@ const consolidarArchivos = async (req, res) => {
             tipo,
             fechas
         );
+        console.log('[Consolidar] Archivo consolidado generado:', rutaConsolidada);
 
         res.status(200).json({
             success: true,
