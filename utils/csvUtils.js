@@ -48,11 +48,11 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
  */
 const fechaEnRango = (fechaStr, fechas) => {
     if (!fechas) return true;
-    // Extraer solo la parte de fecha (yyyy-mm-dd) del campo fechaFiltro
-    const soloFecha = fechaStr.slice(0, 10); // yyyy-mm-dd
-    const inicio = fechas.inicio.toISOString().slice(0, 10);
-    const fin = fechas.fin.toISOString().slice(0, 10);
-    return soloFecha >= inicio && soloFecha <= fin;
+    // fechaStr está en formato dd/mm/yyyy
+    const [dia, mes, anio] = fechaStr.split('/');
+    const fecha = new Date(`${anio}-${mes}-${dia}T00:00:00Z`);
+    // fechas.inicio y fechas.fin son Date
+    return fecha >= fechas.inicio && fecha <= fechas.fin;
 };
 
 /**

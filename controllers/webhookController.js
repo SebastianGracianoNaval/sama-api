@@ -41,13 +41,44 @@ const handleWebhook = async (req, res) => {
         const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
 
         // Agregar el campo 'fechaFiltro' al final de cada objeto antes de convertirlo a CSV
-        const fechaFiltro = new Date().toISOString();
-        let dataConFechaFiltro;
+        function obtenerFechaFiltro(obj) {
+            // Buscar la fecha más relevante en el objeto
+            let fecha = null;
+            // 1. Buscar en metadata.#envelope.storageDate
+            if (obj.metadata && obj.metadata['#envelope.storageDate']) {
+                fecha = obj.metadata['#envelope.storageDate'];
+            } else if (obj.metadata && obj.metadata['#wa.timestamp']) {
+                // 2. Buscar en metadata.#wa.timestamp (es unix timestamp en segundos)
+                const ts = Number(obj.metadata['#wa.timestamp']);
+                if (!isNaN(ts)) {
+                    fecha = new Date(ts * 1000).toISOString();
+                }
+            } else if (obj.date_created) {
+                // 3. Buscar en date_created (si existe)
+                const ts = Number(obj.date_created);
+                if (!isNaN(ts)) {
+                    fecha = new Date(ts).toISOString();
+                }
+            } else if (obj['#envelope.storageDate']) {
+                // 4. Buscar en #envelope.storageDate directo
+                fecha = obj['#envelope.storageDate'];
+            }
+            // Si no se encontró, usar la fecha actual
+            if (!fecha) {
+                fecha = new Date().toISOString();
+            }
+            // Formatear a dd/mm/yyyy
+            const d = new Date(fecha);
+            const dia = String(d.getDate()).padStart(2, '0');
+            const mes = String(d.getMonth() + 1).padStart(2, '0');
+            const anio = d.getFullYear();
+            return `${dia}/${mes}/${anio}`;
+        }
         function addFechaFiltro(obj) {
             const entries = Object.entries(obj);
             // Eliminar si ya existe
             const filtered = entries.filter(([key]) => key !== 'fechaFiltro');
-            return Object.fromEntries([...filtered, ['fechaFiltro', fechaFiltro]]);
+            return Object.fromEntries([...filtered, ['fechaFiltro', obtenerFechaFiltro(obj)]]);
         }
         if (Array.isArray(jsonData)) {
             dataConFechaFiltro = jsonData.map(item => addFechaFiltro(item));
