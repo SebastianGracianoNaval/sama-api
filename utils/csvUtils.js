@@ -13,9 +13,18 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
         // Asegurarnos que jsonData sea un array
         const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
 
+        // Aplanar todos los objetos y asegurar que todos tengan fechaFiltro
+        const flattenedData = dataArray.map(obj => {
+            const flat = flattenObject(obj);
+            if (!('fechaFiltro' in flat) && obj.fechaFiltro) {
+                flat['fechaFiltro'] = obj.fechaFiltro;
+            }
+            return flat;
+        });
+
         // Obtener todos los campos únicos de todos los objetos
         const fields = new Set();
-        dataArray.forEach(obj => {
+        flattenedData.forEach(obj => {
             Object.keys(obj).forEach(key => fields.add(key));
         });
 
@@ -40,7 +49,7 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
         });
         
         // Convertir el JSON a CSV
-        const csv = parser.parse(dataArray);
+        const csv = parser.parse(flattenedData);
         
         // Asegurarse de que el directorio existe
         const dir = path.dirname(outputPath);
@@ -161,6 +170,19 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         throw error; // Propagar el error para manejarlo en el controlador
     }
 };
+
+// Función para aplanar objetos anidados
+function flattenObject(obj, prefix = '') {
+    return Object.keys(obj).reduce((acc, k) => {
+        const pre = prefix.length ? prefix + '.' : '';
+        if (typeof obj[k] === 'object' && obj[k] !== null && !Array.isArray(obj[k])) {
+            Object.assign(acc, flattenObject(obj[k], pre + k));
+        } else {
+            acc[pre + k] = obj[k];
+        }
+        return acc;
+    }, {});
+}
 
 module.exports = {
     convertJsonToCsv,
