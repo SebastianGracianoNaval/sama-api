@@ -43,21 +43,13 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Función para validar fechas
+// Modificar la función validarFechas para permitir fechas futuras
 function validarFechas(fechaInicio, fechaFin) {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-
     const inicio = new Date(fechaInicio);
     inicio.setHours(0, 0, 0, 0);
 
     const fin = new Date(fechaFin);
     fin.setHours(23, 59, 59, 999);
-
-    // Validar que las fechas no sean futuras
-    if (inicio > hoy || fin > hoy) {
-        return false;
-    }
 
     // Validar que la fecha de inicio no sea posterior a la fecha fin
     if (inicio > fin) {
@@ -198,7 +190,7 @@ app.get('/descargar/todo', async (req, res) => {
     }
 });
 
-// Función auxiliar para consolidar y enviar el CSV
+// Modificar la función descargarCsvConsolidado para incluir datos del día de fechaFin inclusive
 async function descargarCsvConsolidado(tipo, res, fechas = null) {
     try {
         const carpeta = obtenerRutaCarpeta(tipo);

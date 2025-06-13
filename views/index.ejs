@@ -2,11 +2,6 @@
     <div class="col-12">
         <div class="descarga-reportes mb-4">
             <h2>Descargar reportes consolidados</h2>
-            <!-- Alerta de exportación mejorada -->
-            <div id="alertaExportacion" class="alert alert-danger d-flex align-items-center" style="display:none;" role="alert">
-              <i class="bi bi-exclamation-triangle-fill me-2" style="font-size:1.5rem;"></i>
-              <span id="textoAlertaExportacion">No hay datos para exportar.</span>
-            </div>
             <!-- Filtros de fecha -->
             <form class="row g-2 align-items-end mb-3" onsubmit="return false;">
                 <div class="col-auto">
@@ -65,14 +60,39 @@
     </div>
 </div>
 
+<style>
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+.toast {
+  background-color: #dc3545;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+.toast i {
+  margin-right: 10px;
+}
+</style>
+
+<div id="toastContainer" class="toast-container"></div>
+
 <script>
-function mostrarAlertaExportacion(msg) {
-    const alerta = document.getElementById('alertaExportacion');
-    const texto = document.getElementById('textoAlertaExportacion');
-    texto.textContent = msg || 'No hay datos para exportar.';
-    alerta.style.display = 'flex';
+function mostrarToastExportacion(msg) {
+    const toastContainer = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + (msg || 'No hay datos para exportar.');
+    toastContainer.appendChild(toast);
     setTimeout(() => {
-        alerta.style.display = 'none';
+        toast.remove();
     }, 4000);
 }
 function limpiarFechas() {
@@ -86,11 +106,11 @@ function descargarConAlerta(link, event) {
     const hoy = new Date().toISOString().slice(0,10);
     // Validación frontend
     if ((fechaInicio && fechaFin) && (fechaInicio > fechaFin)) {
-        mostrarAlertaExportacion('La fecha de inicio no puede ser posterior a la fecha fin.');
+        mostrarToastExportacion('La fecha de inicio no puede ser posterior a la fecha fin.');
         return false;
     }
     if ((fechaInicio && fechaInicio > hoy) || (fechaFin && fechaFin > hoy)) {
-        mostrarAlertaExportacion('No se pueden seleccionar fechas futuras.');
+        mostrarToastExportacion('No se pueden seleccionar fechas futuras.');
         return false;
     }
     // Construir la URL con los parámetros de fecha si están presentes
@@ -102,15 +122,15 @@ function descargarConAlerta(link, event) {
     fetch(url, { method: 'GET' })
         .then(response => {
             if (response.status === 404) {
-                mostrarAlertaExportacion('No hay datos para el rango de fechas seleccionado.');
+                mostrarToastExportacion('No hay datos para el rango de fechas seleccionado.');
                 return null;
             }
             if (response.status === 400) {
-                response.text().then(msg => mostrarAlertaExportacion(msg));
+                response.text().then(msg => mostrarToastExportacion(msg));
                 return null;
             }
             if (!response.ok) {
-                mostrarAlertaExportacion('Error al descargar el archivo.');
+                mostrarToastExportacion('Error al descargar el archivo.');
                 return null;
             }
             // Obtener el nombre del archivo del header
