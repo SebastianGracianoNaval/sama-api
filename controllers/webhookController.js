@@ -156,10 +156,12 @@ const consolidarArchivos = async (req, res) => {
                 if (!linea) continue;
                 if (usarFiltroFechas && fechaIndex !== -1) {
                     const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    const fecha = valores[fechaIndex];
-                    console.log(`[Filtro] fechaFiltro en línea: '${fecha}' (${typeof fecha}), comparando con inicio: '${fechaInicio}' (${typeof fechaInicio}), fin: '${fechaFin}' (${typeof fechaFin})`);
-                    const entra = fecha && fecha >= fechaInicio && fecha <= fechaFin;
-                    console.log(`[Filtro] Comparación: ${fecha} >= ${fechaInicio} && ${fecha} <= ${fechaFin} => ${entra}`);
+                    let fecha = valores[fechaIndex];
+                    if (fecha) fecha = fecha.replace(/"/g, '').trim();
+                    let inicio = fechaInicio ? fechaInicio.trim() : '';
+                    let fin = fechaFin ? fechaFin.trim() : '';
+                    const entra = fecha && (new Date(fecha) >= new Date(inicio)) && (new Date(fecha) <= new Date(fin));
+                    console.log(`[Filtro] Comparando: ${fecha} >= ${inicio} && ${fecha} <= ${fin} => ${entra}`);
                     if (entra) {
                         incluidas++;
                         datosCombinados.push(linea);
