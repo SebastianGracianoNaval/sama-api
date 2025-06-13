@@ -78,6 +78,12 @@ const handleWebhook = async (req, res) => {
 
         // Convertir JSON a CSV (siempre como array de objetos planos)
         const tipo = identificarTipoJson(jsonData);
+        if (!tipo) {
+            return res.status(400).json({
+                success: false,
+                message: 'No se pudo identificar el tipo de datos del JSON recibido'
+            });
+        }
         const carpeta = obtenerRutaCarpeta(tipo);
         const nombreArchivo = generarNombreArchivo(tipo);
         const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);

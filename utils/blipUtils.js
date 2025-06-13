@@ -4,43 +4,32 @@
  * @returns {string} - El tipo identificado ('mensaje', 'evento', 'contacto' o null)
  */
 const identificarTipoJson = (jsonData) => {
-    if (!jsonData) return null;
+    if (!jsonData) return 'otro';
 
-    // Verificar si es un mensaje
-    if (jsonData.type && typeof jsonData.type === 'string') {
-        const tiposMensaje = [
-            'text/plain',
-            'application/json',
-            'application/vnd.lime.collection+json'
-        ];
-        if (tiposMensaje.includes(jsonData.type)) {
-            return 'mensaje';
+    // 🎫 Tickets
+    if (jsonData.type === 'application/vnd.iris.ticket+json') {
+        return 'ticket';
+    }
+    if (jsonData.content && typeof jsonData.content === 'object') {
+        const ticketFields = ['status', 'team', 'unreadMessages'];
+        if (ticketFields.some(f => f in jsonData.content)) {
+            return 'ticket';
         }
     }
-
-    // Verificar si es un flujo (category y action)
-    /*if (jsonData.category && jsonData.action) {
-        return 'flujo';
-    }*/
-
-    // Verificar si es un evento
-    if (jsonData.category && typeof jsonData.category === 'string') {
-        const tiposEvento = ['Possui cadastro', 'flow'];
-        if (tiposEvento.includes(jsonData.category)) {
-            return 'evento';
-        }
+    // 📩 Mensajes
+    if ('type' in jsonData) {
+        return 'mensaje';
     }
-
-    // Verificar si es un contacto
-    if (jsonData.lastMessageDate && typeof jsonData.lastMessageDate === 'string') {
-        // Verificar si lastMessageDate es una fecha UTC válida
-        const dateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
-        if (dateRegex.test(jsonData.lastMessageDate)) {
-            return 'contacto';
-        }
+    // 📊 Eventos
+    if ('category' in jsonData) {
+        return 'evento';
     }
-
-    return null;
+    // 👥 Contactos
+    if ('lastMessageDate' in jsonData) {
+        return 'contacto';
+    }
+    // Si no coincide con ninguna, devolver 'desconocido'
+    return 'desconocido';
 };
 
 /**
