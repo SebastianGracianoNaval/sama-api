@@ -1,0 +1,35 @@
+.webhook-container {
+    max-height: 600px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    margin-bottom: 1rem;
+}
+
+.list-group-item {
+    border-left: none;
+    border-right: none;
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item pre {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.25rem;
+    margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#refreshBtn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#refreshBtn i {
+    font-size: 1.2rem;
+} 
