@@ -32,39 +32,84 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
 };
 
 /**
+ * Verifica si una fecha está dentro del rango especificado
+ * @param {string} fechaStr - Fecha a verificar en formato ISO
+ * @param {Object} fechas - Objeto con fechas de inicio y fin
+ * @returns {boolean} - true si la fecha está dentro del rango
+ */
+const fechaEnRango = (fechaStr, fechas) => {
+    if (!fechas) return true;
+    
+    const fecha = new Date(fechaStr);
+    return fecha >= fechas.inicio && fecha <= fechas.fin;
+};
+
+/**
  * Consolida todos los archivos CSV de un directorio en uno solo
  * @param {string} directorio - Ruta del directorio que contiene los archivos CSV
  * @param {string} tipo - Tipo de datos ('mensaje', 'evento', 'contacto')
+ * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
  */
-const consolidarCsvs = async (directorio, tipo) => {
+const consolidarCsvs = async (directorio, tipo, fechas = null) => {
     try {
         // Leer todos los archivos CSV del directorio
         const archivos = fs.readdirSync(directorio)
             .filter(archivo => archivo.endsWith('.csv'));
 
         if (archivos.length === 0) {
-            throw new Error('No hay archivos CSV para consolidar');
+            return null; // No hay archivos para consolidar
         }
 
         // Leer y combinar todos los archivos
         let datosCombinados = [];
+        let encabezados = null;
+
         for (const archivo of archivos) {
             const rutaArchivo = path.join(directorio, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
             const lineas = contenido.split('\n');
             
             // Obtener encabezados del primer archivo
-            if (datosCombinados.length === 0) {
-                datosCombinados.push(lineas[0]);
+            if (!encabezados) {
+                encabezados = lineas[0];
+                datosCombinados.push(encabezados);
             }
             
-            // Agregar datos (excluyendo encabezados)
-            datosCombinados.push(...lineas.slice(1));
+            // Procesar cada línea de datos
+            for (let i = 1; i < lineas.length; i++) {
+                const linea = lineas[i].trim();
+                if (!linea) continue;
+
+                // Si hay fechas para filtrar, verificar si la línea está en el rango
+                if (fechas) {
+                    // Buscar la columna de fecha en los encabezados
+                    const columnas = encabezados.split(',');
+                    const fechaIndex = columnas.findIndex(col => 
+                        col.toLowerCase().includes('fecha') || 
+                        col.toLowerCase().includes('date') ||
+                        col.toLowerCase().includes('timestamp')
+                    );
+
+                    if (fechaIndex !== -1) {
+                        const valores = linea.split(',');
+                        if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex], fechas)) {
+                            continue; // Saltar esta línea si no está en el rango de fechas
+                        }
+                    }
+                }
+
+                datosCombinados.push(linea);
+            }
         }
 
-        // Eliminar líneas vacías y duplicados
-        datosCombinados = [...new Set(datosCombinados)].filter(linea => linea.trim());
+        // Si no hay datos después del filtrado, retornar null
+        if (datosCombinados.length <= 1) {
+            return null;
+        }
+
+        // Eliminar líneas duplicadas
+        datosCombinados = [...new Set(datosCombinados)];
 
         // Crear archivo consolidado en la carpeta reportes
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

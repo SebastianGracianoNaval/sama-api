@@ -1,11 +1,31 @@
 <div class="row">
     <div class="col-12">
-        <div class="descarga-reportes d-flex justify-content-between align-items-center mb-4">
+        <div class="descarga-reportes mb-4">
             <h2>Descargar reportes consolidados</h2>
+            
+            <!-- Formulario de filtro de fechas -->
+            <form id="filtroFechas" class="mb-3">
+                <div class="row align-items-end">
+                    <div class="col-md-4">
+                        <label for="fechaInicio" class="form-label">Fecha Inicio</label>
+                        <input type="date" class="form-control" id="fechaInicio" name="fechaInicio" max="<%= new Date().toISOString().split('T')[0] %>">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="fechaFin" class="form-label">Fecha Fin</label>
+                        <input type="date" class="form-control" id="fechaFin" name="fechaFin" max="<%= new Date().toISOString().split('T')[0] %>">
+                    </div>
+                    <div class="col-md-4">
+                        <button type="button" class="btn btn-secondary" onclick="limpiarFechas()">Limpiar Filtros</button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Botones de descarga -->
             <div class="btn-group" role="group">
-                <a href="/descargar/mensajes" class="btn btn-success">Mensajes</a>
-                <a href="/descargar/contactos" class="btn btn-success">Contactos</a>
-                <a href="/descargar/eventos" class="btn btn-success">Eventos</a>
+                <a href="/descargar/mensajes" class="btn btn-success" onclick="return agregarFechas(this)">Mensajes</a>
+                <a href="/descargar/contactos" class="btn btn-success" onclick="return agregarFechas(this)">Contactos</a>
+                <a href="/descargar/eventos" class="btn btn-success" onclick="return agregarFechas(this)">Eventos</a>
+                <a href="/descargar/todo" class="btn btn-primary" onclick="return agregarFechas(this)">TODO</a>
             </div>
         </div>
 
@@ -42,4 +62,50 @@
             <% } %>
         </div>
     </div>
-</div> 
+</div>
+
+<script>
+function agregarFechas(link) {
+    const fechaInicio = document.getElementById('fechaInicio').value;
+    const fechaFin = document.getElementById('fechaFin').value;
+    
+    if (fechaInicio && fechaFin) {
+        const url = new URL(link.href);
+        url.searchParams.set('fechaInicio', fechaInicio);
+        url.searchParams.set('fechaFin', fechaFin);
+        link.href = url.toString();
+    }
+    return true;
+}
+
+function limpiarFechas() {
+    document.getElementById('fechaInicio').value = '';
+    document.getElementById('fechaFin').value = '';
+}
+
+// Validación de fechas en tiempo real
+document.getElementById('fechaInicio').addEventListener('change', validarFechas);
+document.getElementById('fechaFin').addEventListener('change', validarFechas);
+
+function validarFechas() {
+    const fechaInicio = document.getElementById('fechaInicio').value;
+    const fechaFin = document.getElementById('fechaFin').value;
+    const hoy = new Date().toISOString().split('T')[0];
+    
+    if (fechaInicio && fechaFin) {
+        if (fechaInicio > fechaFin) {
+            alert('La fecha de inicio no puede ser posterior a la fecha fin');
+            document.getElementById('fechaInicio').value = '';
+            document.getElementById('fechaFin').value = '';
+            return;
+        }
+        
+        if (fechaInicio > hoy || fechaFin > hoy) {
+            alert('No se pueden seleccionar fechas futuras');
+            document.getElementById('fechaInicio').value = '';
+            document.getElementById('fechaFin').value = '';
+            return;
+        }
+    }
+}
+</script> 
