@@ -75,9 +75,8 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
  */
 const fechaEnRango = (fechaStr, fechas) => {
     if (!fechas) return true;
-    // fechaStr está en formato dd/mm/yyyy
-    const [dia, mes, anio] = fechaStr.split('/');
-    const fecha = new Date(`${anio}-${mes}-${dia}T00:00:00Z`);
+    // fechaStr está en formato yyyy-mm-dd
+    const fecha = new Date(fechaStr + 'T00:00:00Z');
     // fechas.inicio y fechas.fin son Date
     return fecha >= fechas.inicio && fecha <= fechas.fin;
 };
