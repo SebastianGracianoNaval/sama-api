@@ -1,4 +1,4 @@
-const { convertJsonToCsv, consolidarCsvs } = require('../utils/csvUtils');
+const { convertJsonToCsv, consolidarCsvs, flattenObject } = require('../utils/csvUtils');
 const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo } = require('../utils/blipUtils');
 const path = require('path');
 
@@ -46,7 +46,7 @@ const handleWebhook = async (req, res) => {
             return fecha.slice(0, 10); // yyyy-mm-dd
         }
         function addFechaFiltro(obj) {
-            const flat = require('../utils/csvUtils').flattenObject(obj);
+            const flat = flattenObject(obj);
             flat['fechaFiltro'] = obtenerFechaFiltro(obj);
             return flat;
         }
