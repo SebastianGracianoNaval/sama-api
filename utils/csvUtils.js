@@ -83,9 +83,9 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
 
                 // Si hay fechas para filtrar, verificar si la línea está en el rango
                 if (fechas) {
-                    // Buscar la columna 'fecha' exactamente
+                    // Buscar la columna 'fechaFiltro' exactamente
                     const columnas = encabezados.split(',');
-                    const fechaIndex = columnas.findIndex(col => col.trim() === 'fecha');
+                    const fechaIndex = columnas.findIndex(col => col.trim() === 'fechaFiltro');
 
                     if (fechaIndex !== -1) {
                         // Soportar comas dentro de comillas
