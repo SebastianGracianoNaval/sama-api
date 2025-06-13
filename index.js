@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
-const { obtenerRutaCarpeta } = require('./utils/blipUtils');
+const { obtenerRutaCarpeta, identificarTipoJson } = require('./utils/blipUtils');
 const { consolidarCsvs } = require('./utils/csvUtils');
 
 // Crear una aplicación Express
@@ -51,8 +51,10 @@ app.get('/', (req, res) => {
 
 // Ruta para recibir el webhook y guardar en memoria
 app.post('/webhook', (req, res) => {
+    const tipo = identificarTipoJson(req.body) || 'desconocido';
     webhooksRecibidos.push({
         fecha: new Date().toISOString(),
+        tipo,
         body: req.body
     });
     handleWebhook(req, res);
