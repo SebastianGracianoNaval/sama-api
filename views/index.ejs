@@ -2,13 +2,16 @@
     <div class="col-12">
         <div class="descarga-reportes mb-4">
             <h2>Descargar reportes consolidados</h2>
-            
+            <!-- Alerta de exportación -->
+            <div id="alertaExportacion" class="alert alert-danger" style="display:none;" role="alert">
+              No hay datos para exportar.
+            </div>
             <!-- Botones de descarga -->
             <div class="btn-group" role="group">
-                <a href="/descargar/mensajes" class="btn btn-success">Mensajes</a>
-                <a href="/descargar/contactos" class="btn btn-success">Contactos</a>
-                <a href="/descargar/eventos" class="btn btn-success">Eventos</a>
-                <a href="/descargar/todo" class="btn btn-primary">TODO</a>
+                <a href="/descargar/mensajes" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Mensajes</a>
+                <a href="/descargar/contactos" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Contactos</a>
+                <a href="/descargar/eventos" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Eventos</a>
+                <a href="/descargar/todo" class="btn btn-primary" onclick="return descargarConAlerta(this, event)">TODO</a>
             </div>
         </div>
 
@@ -48,5 +51,45 @@
 </div>
 
 <script>
-// Eliminar funciones de filtro y validación de fechas
+function mostrarAlertaExportacion() {
+    const alerta = document.getElementById('alertaExportacion');
+    alerta.style.display = 'block';
+    setTimeout(() => {
+        alerta.style.display = 'none';
+    }, 4000);
+}
+function descargarConAlerta(link, event) {
+    event.preventDefault();
+    fetch(link.href, { method: 'GET' })
+        .then(response => {
+            if (response.status === 404) {
+                mostrarAlertaExportacion();
+                return null;
+            }
+            if (!response.ok) {
+                alert('Error al descargar el archivo.');
+                return null;
+            }
+            // Obtener el nombre del archivo del header
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = 'reporte.csv';
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+                filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+            }
+            return response.blob().then(blob => ({ blob, filename }));
+        })
+        .then(data => {
+            if (data) {
+                const urlBlob = window.URL.createObjectURL(data.blob);
+                const a = document.createElement('a');
+                a.href = urlBlob;
+                a.download = data.filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(urlBlob);
+            }
+        });
+    return false;
+}
 </script> 
