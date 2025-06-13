@@ -20,7 +20,6 @@ const handleWebhook = async (req, res) => {
 
         // Identificar el tipo de JSON
         const tipo = identificarTipoJson(jsonData);
-        console.log('[Webhook] Tipo detectado:', tipo);
         if (!tipo) {
             return res.status(400).json({
                 success: false,
@@ -74,7 +73,6 @@ const handleWebhook = async (req, res) => {
             const mes = String(d.getMonth() + 1).padStart(2, '0');
             const anio = d.getFullYear();
             const fechaFiltro = `${dia}/${mes}/${anio}`;
-            console.log('[Webhook] fechaFiltro generada:', fechaFiltro);
             return fechaFiltro;
         }
         function addFechaFiltro(obj) {
@@ -119,9 +117,6 @@ const consolidarArchivos = async (req, res) => {
         const { tipo } = req.params;
         const { fechaInicio, fechaFin } = req.query;
 
-        console.log('[Consolidar] Tipo:', tipo);
-        console.log('[Consolidar] Query fechas:', req.query);
-
         if (!['mensaje', 'evento', 'contacto'].includes(tipo)) {
             return res.status(400).json({
                 success: false,
@@ -130,7 +125,6 @@ const consolidarArchivos = async (req, res) => {
         }
 
         const carpeta = obtenerRutaCarpeta(tipo);
-        console.log('[Consolidar] Carpeta a leer:', carpeta);
         if (!carpeta) {
             return res.status(500).json({
                 success: false,
@@ -145,11 +139,19 @@ const consolidarArchivos = async (req, res) => {
                 inicio: new Date(fechaInicio),
                 fin: new Date(fechaFin)
             };
+        }
+
+        // LOGS DE CONSOLIDACION
+        const pathCarpeta = path.join(__dirname, '..', carpeta);
+        const fs = require('fs');
+        const archivos = fs.readdirSync(pathCarpeta).filter(archivo => archivo.endsWith('.csv'));
+        console.log('[Consolidar] Archivos CSV encontrados:', archivos);
+        if (fechas) {
             console.log('[Consolidar] Fechas para filtrar:', fechas);
         }
 
         const rutaConsolidada = await consolidarCsvs(
-            path.join(__dirname, '..', carpeta),
+            pathCarpeta,
             tipo,
             fechas
         );
@@ -163,7 +165,6 @@ const consolidarArchivos = async (req, res) => {
 
     } catch (error) {
         console.error('Error al consolidar archivos:', error);
-        
         // Manejar errores específicos
         if (error.message === 'No hay datos para el período especificado') {
             return res.status(404).json({
@@ -171,14 +172,12 @@ const consolidarArchivos = async (req, res) => {
                 message: 'No hay datos para el período especificado'
             });
         }
-        
         if (error.message === 'No hay archivos CSV para consolidar') {
             return res.status(404).json({
                 success: false,
                 message: 'No hay archivos para consolidar'
             });
         }
-
         res.status(500).json({
             success: false,
             message: 'Error al consolidar los archivos',
