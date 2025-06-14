@@ -75,10 +75,15 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
  */
 const fechaEnRango = (fechaStr, fechas) => {
     if (!fechas) return true;
-    // fechaStr está en formato yyyy-mm-dd
-    const fecha = new Date(fechaStr + 'T00:00:00Z');
-    // fechas.inicio y fechas.fin son Date
-    return fecha >= fechas.inicio && fecha <= fechas.fin;
+    if (!fechaStr) return false;
+    // Tomar solo la parte yyyy-mm-dd de cada fecha
+    const fechaLimpia = fechaStr.trim().slice(0, 10);
+    const inicio = fechas.inicio.toISOString().slice(0, 10);
+    const fin = fechas.fin.toISOString().slice(0, 10);
+    const entra = (fechaLimpia >= inicio && fechaLimpia <= fin);
+    // Debug
+    console.log(`[fechaEnRango] fechaFiltro: '${fechaLimpia}', inicio: '${inicio}', fin: '${fin}', entra: ${entra}`);
+    return entra;
 };
 
 /**
@@ -123,16 +128,15 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
                 const linea = lineas[i].trim();
                 if (!linea) continue;
 
-                // Si hay fechas para filtrar, verificar si la línea está en el rango
                 if (fechas && fechas.inicio && fechas.fin && fechaIndex !== -1) {
                     const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex], fechas)) {
-                        continue; // Saltar esta línea si no está en el rango de fechas
+                    if (valores[fechaIndex] && fechaEnRango(valores[fechaIndex], fechas)) {
+                        datosFiltrados = true;
+                        datosCombinados.push(linea); // Solo agregar si pasa el filtro
                     }
-                    datosFiltrados = true;
+                } else {
+                    datosCombinados.push(linea); // Si no hay filtro, agregar todo
                 }
-
-                datosCombinados.push(linea);
             }
         }
 

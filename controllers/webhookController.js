@@ -42,8 +42,12 @@ const handleWebhook = async (req, res) => {
             } else if (obj.lastMessageDate) {
                 fecha = obj.lastMessageDate;
             }
-            if (!fecha) fecha = new Date().toISOString();
-            return fecha.slice(0, 10); // yyyy-mm-dd
+            // Validar que sea una fecha yyyy-mm-dd
+            if (fecha && /^\d{4}-\d{2}-\d{2}/.test(fecha.slice(0, 10))) {
+                return fecha.slice(0, 10);
+            }
+            // Si no hay fecha válida, usar la fecha actual
+            return new Date().toISOString().slice(0, 10);
         }
         function addFechaFiltro(obj) {
             const fechaFiltro = obtenerFechaFiltro(obj);
