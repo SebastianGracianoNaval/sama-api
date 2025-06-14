@@ -6,6 +6,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
+const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson } = require('./utils/blipUtils');
@@ -26,11 +27,12 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('layout', 'layouts/main');
 app.use(expressLayouts);
 
-// Middleware para archivos estáticos
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Middleware para analizar el cuerpo de las solicitudes JSON
-app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Middleware para manejar errores
@@ -43,27 +45,9 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Modificar la función validarFechas para permitir fechas futuras
-function validarFechas(fechaInicio, fechaFin) {
-    const inicio = new Date(fechaInicio);
-    inicio.setHours(0, 0, 0, 0);
-
-    const fin = new Date(fechaFin);
-    fin.setHours(23, 59, 59, 999);
-
-    // Validar que la fecha de inicio no sea posterior a la fecha fin
-    if (inicio > fin) {
-        return false;
-    }
-
-    return { inicio, fin };
-}
-
-// Página principal que muestra los últimos webhooks recibidos
-app.get('/', (req, res) => {
-    res.render('index', {
-        webhooks: webhooksRecibidos
-    });
+// Ruta para obtener los webhooks
+app.get('/webhook', (req, res) => {
+    res.json(webhooksRecibidos);
 });
 
 // Ruta para recibir el webhook y guardar en memoria
@@ -86,7 +70,10 @@ app.get('/descargar/mensajes', async (req, res) => {
     if (fechaInicio && fechaFin) {
         const fechasValidas = validarFechas(fechaInicio, fechaFin);
         if (!fechasValidas) {
-            return res.status(400).send('Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.');
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
+            });
         }
         await descargarCsvConsolidado('mensaje', res, fechasValidas);
     } else {
@@ -99,7 +86,10 @@ app.get('/descargar/contactos', async (req, res) => {
     if (fechaInicio && fechaFin) {
         const fechasValidas = validarFechas(fechaInicio, fechaFin);
         if (!fechasValidas) {
-            return res.status(400).send('Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.');
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
+            });
         }
         await descargarCsvConsolidado('contacto', res, fechasValidas);
     } else {
@@ -112,7 +102,10 @@ app.get('/descargar/eventos', async (req, res) => {
     if (fechaInicio && fechaFin) {
         const fechasValidas = validarFechas(fechaInicio, fechaFin);
         if (!fechasValidas) {
-            return res.status(400).send('Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.');
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
+            });
         }
         await descargarCsvConsolidado('evento', res, fechasValidas);
     } else {
@@ -128,7 +121,10 @@ app.get('/descargar/todo', async (req, res) => {
     if (fechaInicio && fechaFin) {
         fechasValidas = validarFechas(fechaInicio, fechaFin);
         if (!fechasValidas) {
-            return res.status(400).send('Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.');
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
+            });
         }
     }
 
@@ -151,7 +147,10 @@ app.get('/descargar/todo', async (req, res) => {
         }
 
         if (archivos.length === 0) {
-            return res.status(404).send('No hay datos para consolidar en el período especificado.');
+            return res.status(404).json({
+                success: false,
+                message: 'No hay datos para consolidar en el período especificado.'
+            });
         }
 
         // Si solo hay un archivo, descargarlo directamente
@@ -160,8 +159,8 @@ app.get('/descargar/todo', async (req, res) => {
         }
 
         // Si hay múltiples archivos, crear un ZIP
-        const archivo = require('archiver');
-        const archive = archivo('zip', {
+        const archiver = require('archiver');
+        const archive = archiver('zip', {
             zlib: { level: 9 }
         });
 
@@ -178,7 +177,7 @@ app.get('/descargar/todo', async (req, res) => {
 
         res.download(zipPath, 'todos_los_datos.zip', (err) => {
             if (err) {
-                res.status(500).send('Error al descargar el archivo');
+                console.error('Error al descargar el archivo ZIP:', err);
             }
             // Limpiar el archivo ZIP después de la descarga
             fs.unlink(zipPath, (err) => {
@@ -186,34 +185,69 @@ app.get('/descargar/todo', async (req, res) => {
             });
         });
     } catch (error) {
-        res.status(500).send('Error al consolidar los archivos: ' + error.message);
+        console.error('Error al procesar la descarga:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al procesar la descarga',
+            error: error.message
+        });
     }
 });
 
-// Modificar la función descargarCsvConsolidado para incluir datos del día de fechaFin inclusive
+// Función para validar fechas
+function validarFechas(fechaInicio, fechaFin) {
+    const hoy = new Date().toISOString().slice(0, 10);
+    
+    if (fechaInicio > fechaFin) {
+        return false;
+    }
+    
+    if (fechaInicio > hoy || fechaFin > hoy) {
+        return false;
+    }
+    
+    return { fechaInicio, fechaFin };
+}
+
+// Función para descargar CSV consolidado
 async function descargarCsvConsolidado(tipo, res, fechas = null) {
     try {
         const carpeta = obtenerRutaCarpeta(tipo);
         if (!carpeta) {
-            return res.status(400).send('Tipo de datos inválido');
+            return res.status(500).json({
+                success: false,
+                message: 'Error al determinar la carpeta de destino'
+            });
         }
-        const ruta = path.join(__dirname, carpeta);
-        const rutaCsv = await consolidarCsvs(ruta, tipo, fechas);
+
+        const pathCarpeta = path.join(__dirname, carpeta);
+        if (!fs.existsSync(pathCarpeta)) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontró el directorio de datos.'
+            });
+        }
+
+        const rutaCsv = await consolidarCsvs(pathCarpeta, tipo, fechas);
         if (!rutaCsv) {
-            return res.status(404).send('No hay datos para consolidar en el período especificado.');
+            return res.status(404).json({
+                success: false,
+                message: 'No hay datos para consolidar en el período especificado.'
+            });
         }
-        const nombreArchivo = path.basename(rutaCsv);
-        res.download(rutaCsv, nombreArchivo, (err) => {
-            if (err) {
-                res.status(500).send('Error al descargar el archivo');
-            }
-        });
+
+        res.download(rutaCsv, path.basename(rutaCsv));
     } catch (error) {
-        res.status(500).send('Error al generar el archivo: ' + error.message);
+        console.error('Error al descargar el archivo:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al descargar el archivo',
+            error: error.message
+        });
     }
 }
 
 // Iniciar el servidor
 app.listen(PORT, () => {
-    console.log(`Servidor corriendo en el puerto ${PORT}`);
+    console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
