@@ -68,31 +68,72 @@
   z-index: 1000;
 }
 .toast {
-  background-color: #dc3545;
   color: white;
-  padding: 10px 20px;
+  padding: 12px 20px;
   border-radius: 4px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
   margin-bottom: 10px;
   display: flex;
   align-items: center;
+  min-width: 300px;
+  animation: slideIn 0.3s ease-out;
+}
+.toast.success {
+  background-color: #28a745;
+}
+.toast.error {
+  background-color: #dc3545;
+}
+.toast.warning {
+  background-color: #ffc107;
+  color: #000;
 }
 .toast i {
   margin-right: 10px;
+  font-size: 1.2em;
+}
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 </style>
 
 <div id="toastContainer" class="toast-container"></div>
 
 <script>
-function mostrarToastExportacion(msg) {
+function mostrarToastExportacion(msg, tipo = 'error') {
     const toastContainer = document.getElementById('toastContainer');
     const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + (msg || 'No hay datos para exportar.');
+    toast.className = `toast ${tipo}`;
+    
+    // Iconos según el tipo de mensaje
+    let icon = '';
+    switch(tipo) {
+        case 'success':
+            icon = '<i class="bi bi-check-circle-fill"></i>';
+            break;
+        case 'warning':
+            icon = '<i class="bi bi-exclamation-triangle-fill"></i>';
+            break;
+        default:
+            icon = '<i class="bi bi-x-circle-fill"></i>';
+    }
+    
+    toast.innerHTML = icon + (msg || 'No hay datos para exportar.');
     toastContainer.appendChild(toast);
+    
+    // Animación de salida
     setTimeout(() => {
-        toast.remove();
+        toast.style.animation = 'slideOut 0.3s ease-out forwards';
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
     }, 4000);
 }
 function limpiarFechas() {
@@ -108,12 +149,12 @@ function descargarConAlerta(link, event) {
     // Validación frontend
     if ((fechaInicio && fechaFin) && (fechaInicio > fechaFin)) {
         console.log('Error: La fecha de inicio no puede ser posterior a la fecha fin.');
-        mostrarToastExportacion('La fecha de inicio no puede ser posterior a la fecha fin.');
+        mostrarToastExportacion('La fecha de inicio no puede ser posterior a la fecha fin.', 'error');
         return false;
     }
     if ((fechaInicio && fechaInicio > hoy) || (fechaFin && fechaFin > hoy)) {
         console.log('Error: No se pueden seleccionar fechas futuras.');
-        mostrarToastExportacion('No se pueden seleccionar fechas futuras.');
+        mostrarToastExportacion('No se pueden seleccionar fechas futuras.', 'error');
         return false;
     }
     // Construir la URL con los parámetros de fecha si están presentes
@@ -127,21 +168,26 @@ function descargarConAlerta(link, event) {
         .then(async response => {
             console.log('Respuesta del servidor:', response.status, response.statusText);
             if (!response.ok) {
-                // Intentar extraer mensaje de error del backend (JSON o texto)
                 let msg = 'Error al descargar el archivo.';
                 try {
                     const contentType = response.headers.get('Content-Type') || '';
                     if (contentType.includes('application/json')) {
                         const data = await response.json();
-                        msg = data.message || msg;
+                        if (data.message.includes('No hay datos para el período')) {
+                            mostrarToastExportacion('No hay datos para el período especificado', 'error');
+                        } else if (data.message.includes('No hay archivos CSV')) {
+                            mostrarToastExportacion('No hay datos para exportar', 'error');
+                        } else {
+                            mostrarToastExportacion(data.message || msg, 'error');
+                        }
                     } else {
                         const text = await response.text();
                         if (text && text.length < 200) msg = text;
+                        mostrarToastExportacion(msg, 'error');
                     }
                 } catch (e) {
-                    // Si falla, usar mensaje genérico
+                    mostrarToastExportacion(msg, 'error');
                 }
-                mostrarToastExportacion(msg);
                 return null;
             }
             // Obtener el nombre del archivo del header
@@ -163,11 +209,13 @@ function descargarConAlerta(link, event) {
                 a.click();
                 a.remove();
                 window.URL.revokeObjectURL(urlBlob);
+                // Mostrar mensaje de éxito
+                mostrarToastExportacion('Archivo descargado correctamente', 'success');
             }
         })
         .catch(error => {
             console.error('Error en la petición:', error);
-            mostrarToastExportacion('Error al procesar la petición.');
+            mostrarToastExportacion('Error al procesar la petición.', 'error');
         });
     return false;
 }
