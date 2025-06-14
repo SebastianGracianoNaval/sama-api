@@ -114,6 +114,10 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
                 datosCombinados.push(encabezados);
             }
             
+            // Limpiar comillas dobles de los encabezados
+            const columnas = encabezados.split(',').map(col => col.trim().replace(/^"|"$/g, ''));
+            const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
+            
             // Procesar cada línea de datos
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
@@ -121,10 +125,6 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
 
                 // Si hay fechas para filtrar, verificar si la línea está en el rango
                 if (fechas) {
-                    // Buscar la columna 'fechaFiltro'
-                    const columnas = encabezados.split(',').map(col => col.trim());
-                    const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
-
                     if (fechaIndex !== -1) {
                         // Parsear la línea CSV correctamente
                         const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
