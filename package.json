@@ -1,0 +1,21 @@
+{
+  "name": "sama-node",
+  "version": "1.0.0",
+  "description": "BLiP Webhook Dashboard",
+  "main": "backend/index.js",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "install": "cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm start\""
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
