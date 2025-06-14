@@ -131,6 +131,7 @@ const consolidarArchivos = async (req, res) => {
             });
         }
         const archivos = fs.readdirSync(pathCarpeta).filter(archivo => archivo.endsWith('.csv'));
+        console.log('[consolidarArchivos] Archivos CSV encontrados:', archivos);
         if (archivos.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -148,29 +149,34 @@ const consolidarArchivos = async (req, res) => {
             if (!encabezados) {
                 encabezados = lineas[0];
                 datosCombinados.push(encabezados);
+                console.log('[consolidarArchivos] Encabezados:', encabezados);
             }
             const columnas = encabezados.split(',').map(col => col.trim());
             const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
+            console.log('[consolidarArchivos] Índice de fechaFiltro:', fechaIndex);
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
                 if (!linea) continue;
                 if (usarFiltroFechas && fechaIndex !== -1) {
                     const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
                     const fecha = valores[fechaIndex];
+                    console.log(`[Filtro] Línea ${i}: fechaFiltro='${fecha}', fechaInicio='${fechaInicio}', fechaFin='${fechaFin}'`);
                     const entra = fecha && fecha >= fechaInicio && fecha <= fechaFin;
                     console.log(`[Filtro] Comparación: ${fecha} >= ${fechaInicio} && ${fecha} <= ${fechaFin} => ${entra}`);
                     if (entra) {
                         incluidas++;
                         datosCombinados.push(linea);
+                        console.log(`[Filtro] Línea ${i} INCLUIDA`);
                     } else {
                         descartadas++;
+                        console.log(`[Filtro] Línea ${i} DESCARTADA`);
                     }
                 } else {
                     datosCombinados.push(linea);
                 }
             }
         }
-        console.log(`[Filtro] Líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+        console.log(`[Filtro] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
         if (datosCombinados.length <= 1) {
             console.log('[Filtro] No hay datos después del filtrado.');
             return res.status(404).json({
