@@ -1,174 +1,135 @@
-<div class="row">
-    <div class="col-12">
-        <div class="descarga-reportes mb-4">
-            <h2>Descargar reportes consolidados</h2>
-            <!-- Filtros de fecha -->
-            <form class="row g-2 align-items-end mb-3" onsubmit="return false;">
-                <div class="col-auto">
-                    <label for="fechaInicio" class="form-label mb-0">Fecha inicio</label>
-                    <input type="date" class="form-control" id="fechaInicio" max="<%= new Date().toISOString().slice(0,10) %>">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exportador de Datos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet">
+    <style>
+        /* ... existing styles ... */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="mb-0">Exportador de Datos</h2>
+            </div>
+            <div class="card-body">
+                <div class="date-inputs">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="fechaInicio">Fecha Inicio:</label>
+                            <input type="date" id="fechaInicio" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="fechaFin">Fecha Fin:</label>
+                            <input type="date" id="fechaFin" class="form-control">
+                        </div>
+                    </div>
                 </div>
-                <div class="col-auto">
-                    <label for="fechaFin" class="form-label mb-0">Fecha fin</label>
-                    <input type="date" class="form-control" id="fechaFin" max="<%= new Date().toISOString().slice(0,10) %>">
+                <div class="btn-group">
+                    <button onclick="descargarCSV('mensaje')" class="btn btn-primary">Descargar Mensajes</button>
+                    <button onclick="descargarCSV('evento')" class="btn btn-primary">Descargar Eventos</button>
+                    <button onclick="descargarCSV('contacto')" class="btn btn-primary">Descargar Contactos</button>
                 </div>
-                <div class="col-auto">
-                    <button type="button" class="btn btn-secondary" onclick="limpiarFechas()">Limpiar</button>
-                </div>
-            </form>
-            <!-- Botones de descarga -->
-            <div class="btn-group" role="group">
-                <a href="/descargar/mensajes" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Mensajes</a>
-                <a href="/descargar/contactos" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Contactos</a>
-                <a href="/descargar/eventos" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Eventos</a>
-                <a href="/descargar/todo" class="btn btn-primary" onclick="return descargarConAlerta(this, event)">TODO</a>
             </div>
         </div>
-
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>Últimos webhooks recibidos</h2>
-            <button id="refreshBtn" class="btn btn-primary">
-                <i class="bi bi-arrow-clockwise"></i> Actualizar
-            </button>
-        </div>
-
-        <div class="webhook-container">
-            <% if (webhooks.length === 0) { %>
-                <div class="alert alert-info">
-                    No se ha recibido ningún webhook aún.
-                </div>
-            <% } else { %>
-                <div class="list-group">
-                    <% webhooks.slice(-10).reverse().forEach((wh, i) => { %>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">
-                                    <%= wh.fecha %>
-                                    <% if (wh.tipo && wh.tipo !== 'desconocido') { %>
-                                        <span class="badge bg-info text-dark ms-2 text-uppercase"><%= wh.tipo %></span>
-                                    <% } else { %>
-                                        <span class="badge bg-secondary ms-2">Tipo desconocido</span>
-                                    <% } %>
-                                </small>
-                            </div>
-                            <pre class="mt-2"><code><%= JSON.stringify(wh.body, null, 2) %></code></pre>
-                        </div>
-                    <% }); %>
-                </div>
-            <% } %>
-        </div>
     </div>
-</div>
 
-<style>
-.toast-container {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 1000;
-}
-.toast {
-  background-color: #dc3545;
-  color: white;
-  padding: 10px 20px;
-  border-radius: 4px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  margin-bottom: 10px;
-  display: flex;
-  align-items: center;
-}
-.toast i {
-  margin-right: 10px;
-}
-</style>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script>
+        // Configuración global de Toastr
+        toastr.options = {
+            "closeButton": true,
+            "debug": false,
+            "newestOnTop": true,
+            "progressBar": true,
+            "positionClass": "toast-top-right",
+            "preventDuplicates": false,
+            "onclick": null,
+            "showDuration": "300",
+            "hideDuration": "1000",
+            "timeOut": "5000",
+            "extendedTimeOut": "1000",
+            "showEasing": "swing",
+            "hideEasing": "linear",
+            "showMethod": "fadeIn",
+            "hideMethod": "fadeOut"
+        };
 
-<div id="toastContainer" class="toast-container"></div>
-
-<script>
-function mostrarToastExportacion(msg) {
-    const toastContainer = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + (msg || 'No hay datos para exportar.');
-    toastContainer.appendChild(toast);
-    setTimeout(() => {
-        toast.remove();
-    }, 4000);
-}
-function limpiarFechas() {
-    document.getElementById('fechaInicio').value = '';
-    document.getElementById('fechaFin').value = '';
-}
-function descargarConAlerta(link, event) {
-    event.preventDefault();
-    const fechaInicio = document.getElementById('fechaInicio').value;
-    const fechaFin = document.getElementById('fechaFin').value;
-    const hoy = new Date().toISOString().slice(0,10);
-    console.log('Fechas seleccionadas:', { fechaInicio, fechaFin, hoy });
-    // Validación frontend
-    if ((fechaInicio && fechaFin) && (fechaInicio > fechaFin)) {
-        console.log('Error: La fecha de inicio no puede ser posterior a la fecha fin.');
-        mostrarToastExportacion('La fecha de inicio no puede ser posterior a la fecha fin.');
-        return false;
-    }
-    if ((fechaInicio && fechaInicio > hoy) || (fechaFin && fechaFin > hoy)) {
-        console.log('Error: No se pueden seleccionar fechas futuras.');
-        mostrarToastExportacion('No se pueden seleccionar fechas futuras.');
-        return false;
-    }
-    // Construir la URL con los parámetros de fecha si están presentes
-    const url = new URL(link.href, window.location.origin);
-    if (fechaInicio && fechaFin) {
-        url.searchParams.set('fechaInicio', fechaInicio);
-        url.searchParams.set('fechaFin', fechaFin);
-    }
-    console.log('URL de la petición:', url.toString());
-    fetch(url, { method: 'GET' })
-        .then(async response => {
-            console.log('Respuesta del servidor:', response.status, response.statusText);
-            if (!response.ok) {
-                // Intentar extraer mensaje de error del backend (JSON o texto)
-                let msg = 'Error al descargar el archivo.';
-                try {
-                    const contentType = response.headers.get('Content-Type') || '';
-                    if (contentType.includes('application/json')) {
-                        const data = await response.json();
-                        msg = data.message || msg;
-                    } else {
-                        const text = await response.text();
-                        if (text && text.length < 200) msg = text;
-                    }
-                } catch (e) {
-                    // Si falla, usar mensaje genérico
+        async function descargarCSV(tipo) {
+            const fechaInicio = document.getElementById('fechaInicio').value;
+            const fechaFin = document.getElementById('fechaFin').value;
+            
+            // Validar fechas
+            if (fechaInicio && fechaFin) {
+                const hoy = new Date().toISOString().split('T')[0];
+                if (fechaInicio > fechaFin) {
+                    toastr.error('La fecha de inicio no puede ser posterior a la fecha fin.');
+                    return;
                 }
-                mostrarToastExportacion(msg);
-                return null;
+                if (fechaInicio > hoy || fechaFin > hoy) {
+                    toastr.error('No se pueden seleccionar fechas futuras.');
+                    return;
+                }
             }
-            // Obtener el nombre del archivo del header
-            const disposition = response.headers.get('Content-Disposition');
-            let filename = 'reporte.csv';
-            if (disposition && disposition.indexOf('filename=') !== -1) {
-                filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+
+            try {
+                const response = await fetch(`/api/consolidar/${tipo}?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        if (data.message.includes('No hay datos para el período')) {
+                            toastr.error('No hay datos para el período especificado');
+                        } else if (data.message.includes('No hay archivos CSV')) {
+                            toastr.error('No hay datos para exportar');
+                        } else {
+                            toastr.error(data.message || 'Error al descargar el archivo');
+                        }
+                    } else {
+                        toastr.error(data.message || 'Error al procesar la solicitud');
+                    }
+                    return;
+                }
+
+                // Descargar el archivo
+                window.location.href = `/download/${tipo}?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+                
+                // Mostrar mensaje de éxito
+                toastr.success(`Archivo ${tipo}.csv descargado correctamente`);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                toastr.error('Error al procesar la solicitud');
             }
-            console.log('Nombre del archivo:', filename);
-            return response.blob().then(blob => ({ blob, filename }));
-        })
-        .then(data => {
-            if (data) {
-                const urlBlob = window.URL.createObjectURL(data.blob);
-                const a = document.createElement('a');
-                a.href = urlBlob;
-                a.download = data.filename;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(urlBlob);
+        }
+
+        // Función para validar fechas en tiempo real
+        function validarFechas() {
+            const fechaInicio = document.getElementById('fechaInicio').value;
+            const fechaFin = document.getElementById('fechaFin').value;
+            const hoy = new Date().toISOString().split('T')[0];
+            
+            if (fechaInicio && fechaFin) {
+                if (fechaInicio > fechaFin) {
+                    toastr.warning('La fecha de inicio no puede ser posterior a la fecha fin.');
+                    return false;
+                }
+                if (fechaInicio > hoy || fechaFin > hoy) {
+                    toastr.warning('No se pueden seleccionar fechas futuras.');
+                    return false;
+                }
             }
-        })
-        .catch(error => {
-            console.error('Error en la petición:', error);
-            mostrarToastExportacion('Error al procesar la petición.');
-        });
-    return false;
-}
-</script> 
+            return true;
+        }
+
+        // Agregar event listeners para validación en tiempo real
+        document.getElementById('fechaInicio').addEventListener('change', validarFechas);
+        document.getElementById('fechaFin').addEventListener('change', validarFechas);
+    </script>
+</body>
+</html> 
