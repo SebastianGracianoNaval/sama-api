@@ -124,16 +124,12 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
                 if (!linea) continue;
 
                 // Si hay fechas para filtrar, verificar si la línea está en el rango
-                if (fechas) {
-                    if (fechaIndex !== -1) {
-                        // Parsear la línea CSV correctamente
-                        const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                        
-                        if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex], fechas)) {
-                            continue; // Saltar esta línea si no está en el rango de fechas
-                        }
-                        datosFiltrados = true;
+                if (fechas && fechas.inicio && fechas.fin && fechaIndex !== -1) {
+                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                    if (valores[fechaIndex] && !fechaEnRango(valores[fechaIndex], fechas)) {
+                        continue; // Saltar esta línea si no está en el rango de fechas
                     }
+                    datosFiltrados = true;
                 }
 
                 datosCombinados.push(linea);
