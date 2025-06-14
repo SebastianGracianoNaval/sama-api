@@ -1,0 +1,234 @@
+<div class="row">
+    <div class="col-12">
+        <div class="descarga-reportes mb-4">
+            <h2>Descargar reportes consolidados</h2>
+            <!-- Filtros de fecha -->
+            <form class="row g-2 align-items-end mb-3" onsubmit="return false;">
+                <div class="col-auto">
+                    <label for="fechaInicio" class="form-label mb-0">Fecha inicio</label>
+                    <input type="date" class="form-control" id="fechaInicio" max="<%= new Date().toISOString().slice(0,10) %>">
+                </div>
+                <div class="col-auto">
+                    <label for="fechaFin" class="form-label mb-0">Fecha fin</label>
+                    <input type="date" class="form-control" id="fechaFin" max="<%= new Date().toISOString().slice(0,10) %>">
+                </div>
+                <div class="col-auto">
+                    <button type="button" class="btn btn-secondary" onclick="limpiarFechas()">Limpiar</button>
+                </div>
+            </form>
+            <!-- Botones de descarga -->
+            <div class="btn-group" role="group">
+                <a href="/descargar/mensajes" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Mensajes</a>
+                <a href="/descargar/contactos" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Contactos</a>
+                <a href="/descargar/eventos" class="btn btn-success" onclick="return descargarConAlerta(this, event)">Eventos</a>
+                <a href="/descargar/todo" class="btn btn-primary" onclick="return descargarConAlerta(this, event)">TODO</a>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Últimos webhooks recibidos</h2>
+            <button id="refreshBtn" class="btn btn-primary">
+                <i class="bi bi-arrow-clockwise"></i> Actualizar
+            </button>
+        </div>
+
+        <div class="webhook-container">
+            <% if (webhooks.length === 0) { %>
+                <div class="alert alert-info">
+                    No se ha recibido ningún webhook aún.
+                </div>
+            <% } else { %>
+                <div class="list-group">
+                    <% webhooks.slice(-10).reverse().forEach((wh, i) => { %>
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    <%= wh.fecha %>
+                                    <% if (wh.tipo && wh.tipo !== 'desconocido') { %>
+                                        <span class="badge bg-info text-dark ms-2 text-uppercase"><%= wh.tipo %></span>
+                                    <% } else { %>
+                                        <span class="badge bg-secondary ms-2">Tipo desconocido</span>
+                                    <% } %>
+                                </small>
+                            </div>
+                            <pre class="mt-2"><code><%= JSON.stringify(wh.body, null, 2) %></code></pre>
+                        </div>
+                    <% }); %>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<style>
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+}
+.toast {
+  color: white;
+  padding: 12px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  min-width: 300px;
+  animation: slideIn 0.3s ease-out;
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+.toast.success {
+  background-color: #28a745;
+}
+.toast.error {
+  background-color: #dc3545;
+}
+.toast.warning {
+  background-color: #ffc107;
+  color: #000;
+}
+.toast i {
+  margin-right: 10px;
+  font-size: 1.2em;
+}
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+</style>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<script>
+function mostrarToastExportacion(msg, tipo = 'error') {
+    const toastContainer = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${tipo}`;
+    
+    // Iconos según el tipo de mensaje
+    let icon = '';
+    switch(tipo) {
+        case 'success':
+            icon = '<i class="bi bi-check-circle-fill"></i>';
+            break;
+        case 'warning':
+            icon = '<i class="bi bi-exclamation-triangle-fill"></i>';
+            break;
+        default:
+            icon = '<i class="bi bi-x-circle-fill"></i>';
+    }
+    
+    toast.innerHTML = icon + (msg || 'No hay datos para exportar.');
+    toastContainer.appendChild(toast);
+    
+    // Animación de salida
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-out forwards';
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 4000);
+}
+function limpiarFechas() {
+    document.getElementById('fechaInicio').value = '';
+    document.getElementById('fechaFin').value = '';
+}
+function descargarConAlerta(link, event) {
+    event.preventDefault();
+    const fechaInicio = document.getElementById('fechaInicio').value;
+    const fechaFin = document.getElementById('fechaFin').value;
+    const hoy = new Date().toISOString().slice(0,10);
+    console.log('Fechas seleccionadas:', { fechaInicio, fechaFin, hoy });
+    // Validación frontend
+    if ((fechaInicio && fechaFin) && (fechaInicio > fechaFin)) {
+        console.log('Error: La fecha de inicio no puede ser posterior a la fecha fin.');
+        mostrarToastExportacion('La fecha de inicio no puede ser posterior a la fecha fin.', 'error');
+        return false;
+    }
+    if ((fechaInicio && fechaInicio > hoy) || (fechaFin && fechaFin > hoy)) {
+        console.log('Error: No se pueden seleccionar fechas futuras.');
+        mostrarToastExportacion('No se pueden seleccionar fechas futuras.', 'error');
+        return false;
+    }
+    // Construir la URL con los parámetros de fecha si están presentes
+    const url = new URL(link.href, window.location.origin);
+    if (fechaInicio && fechaFin) {
+        url.searchParams.set('fechaInicio', fechaInicio);
+        url.searchParams.set('fechaFin', fechaFin);
+    }
+    console.log('URL de la petición:', url.toString());
+    fetch(url, { method: 'GET' })
+        .then(async response => {
+            console.log('Respuesta del servidor:', response.status, response.statusText);
+            if (!response.ok) {
+                let msg = 'Error al descargar el archivo.';
+                try {
+                    const contentType = response.headers.get('Content-Type') || '';
+                    if (contentType.includes('application/json')) {
+                        const data = await response.json();
+                        if (data.message.includes('No hay datos para el período')) {
+                            mostrarToastExportacion('No hay datos para el período especificado', 'error');
+                        } else if (data.message.includes('No hay archivos CSV')) {
+                            mostrarToastExportacion('No hay datos para exportar', 'error');
+                        } else {
+                            mostrarToastExportacion(data.message || msg, 'error');
+                        }
+                    } else {
+                        const text = await response.text();
+                        if (text && text.length < 200) msg = text;
+                        mostrarToastExportacion(msg, 'error');
+                    }
+                } catch (e) {
+                    mostrarToastExportacion(msg, 'error');
+                }
+                return null;
+            }
+            // Obtener el nombre del archivo del header
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = 'reporte.csv';
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+                filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+            }
+            console.log('Nombre del archivo:', filename);
+            return response.blob().then(blob => ({ blob, filename }));
+        })
+        .then(data => {
+            if (data) {
+                const urlBlob = window.URL.createObjectURL(data.blob);
+                const a = document.createElement('a');
+                a.href = urlBlob;
+                a.download = data.filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(urlBlob);
+                // Mostrar mensaje de éxito
+                mostrarToastExportacion('Archivo descargado correctamente', 'success');
+            }
+        })
+        .catch(error => {
+            console.error('Error en la petición:', error);
+            mostrarToastExportacion('Error al procesar la petición.', 'error');
+        });
+    return false;
+}
+</script> 
