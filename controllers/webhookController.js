@@ -44,10 +44,13 @@ const handleWebhook = async (req, res) => {
             }
             // Validar que sea una fecha yyyy-mm-dd
             if (fecha && /^\d{4}-\d{2}-\d{2}/.test(fecha.slice(0, 10))) {
+                console.log('[fechaFiltro válido]', fecha.slice(0, 10));
                 return fecha.slice(0, 10);
             }
-            // Si no hay fecha válida, usar la fecha actual
-            return new Date().toISOString().slice(0, 10);
+            // Si no hay fecha válida, usar la fecha actual y loguear el objeto
+            const hoy = new Date().toISOString().slice(0, 10);
+            console.log('[fechaFiltro inválido, asignando fecha actual]', hoy, 'obj:', obj);
+            return hoy;
         }
         function addFechaFiltro(obj) {
             const fechaFiltro = obtenerFechaFiltro(obj);
