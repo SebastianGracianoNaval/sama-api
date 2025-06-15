@@ -3,7 +3,7 @@ services:
     name: sama-api
     env: node
     buildCommand: npm install && cd frontend && npm install && npm run build
-    startCommand: cd backend && npm install && npm start
+    startCommand: cd backend && node index.js
     envVars:
       - key: NODE_ENV
         value: production
