@@ -2,8 +2,9 @@ services:
   - type: web
     name: sama-api
     env: node
-    buildCommand: npm install && cd frontend && npm install && npm run build
-    startCommand: cd backend && node index.js
+    rootDir: backend
+    buildCommand: cd .. && npm install && cd frontend && npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
