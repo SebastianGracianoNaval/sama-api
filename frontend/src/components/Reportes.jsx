@@ -9,6 +9,10 @@ import {
 } from '@mui/material';
 import { reportService } from '../services/api';
 import { showToast } from './Toast';
+import MailIcon from '@mui/icons-material/Mail';
+import ContactsIcon from '@mui/icons-material/Contacts';
+import EventIcon from '@mui/icons-material/Event';
+import AllInboxIcon from '@mui/icons-material/AllInbox';
 
 const Reportes = () => {
   const [fechaInicio, setFechaInicio] = useState('');
@@ -106,27 +110,39 @@ const Reportes = () => {
           </Button>
         </Box>
         
-        <ButtonGroup variant="contained" sx={{ gap: 1 }}>
-          <Button 
-            color="success" 
+        <ButtonGroup sx={{ gap: 2, mt: 1 }}>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<MailIcon />}
+            sx={{ borderRadius: 3, minWidth: 120, fontWeight: 600 }}
             onClick={() => descargarArchivo('mensajes')}
           >
-            Mensajes
+            MENSAJES
           </Button>
-          <Button 
-            color="success" 
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<ContactsIcon />}
+            sx={{ borderRadius: 3, minWidth: 120, fontWeight: 600 }}
             onClick={() => descargarArchivo('contactos')}
           >
-            Contactos
+            CONTACTOS
           </Button>
-          <Button 
-            color="success" 
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<EventIcon />}
+            sx={{ borderRadius: 3, minWidth: 120, fontWeight: 600 }}
             onClick={() => descargarArchivo('eventos')}
           >
-            Eventos
+            EVENTOS
           </Button>
-          <Button 
-            color="primary" 
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AllInboxIcon />}
+            sx={{ borderRadius: 3, minWidth: 120, fontWeight: 600 }}
             onClick={() => descargarArchivo('todo')}
           >
             TODO
