@@ -28,7 +28,9 @@ app.set('layout', 'layouts/main');
 app.use(expressLayouts);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+}));
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -192,6 +194,11 @@ app.get('/descargar/todo', async (req, res) => {
             error: error.message
         });
     }
+});
+
+// Ruta raíz para verificar que el backend está corriendo
+app.get('/', (req, res) => {
+  res.send('API corriendo correctamente');
 });
 
 // Función para validar fechas
