@@ -1,0 +1,2 @@
+content.sequentialId,content.storageDate,fechaFiltro,status,previousStateName,state,cerrado,fechaCierre
+67890,2024-06-02T15:30:00Z,2024-06-02,FINALIZADO,Atencion Humana,Cerrado,true,2024-06-02 

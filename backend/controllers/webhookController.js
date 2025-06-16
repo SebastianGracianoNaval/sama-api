@@ -1,5 +1,5 @@
 const { convertJsonToCsv, consolidarCsvs, flattenObject, consolidarTicketsCsvs } = require('../utils/csvUtils');
-const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo } = require('../utils/blipUtils');
+const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo, detectarCierreTicket } = require('../utils/blipUtils');
 const path = require('path');
 
 /**
@@ -10,8 +10,10 @@ const path = require('path');
 const handleWebhook = async (req, res) => {
     try {
         const jsonData = req.body;
+        console.log('[Webhook] Datos recibidos:', JSON.stringify(jsonData, null, 2));
         
         if (!jsonData || Object.keys(jsonData).length === 0) {
+            console.error('[Webhook] No se recibieron datos JSON');
             return res.status(400).json({
                 success: false,
                 message: 'No se recibieron datos JSON'
@@ -49,7 +51,7 @@ const handleWebhook = async (req, res) => {
             }
             // Si no hay fecha válida, usar la fecha actual y loguear el objeto
             const hoy = new Date().toISOString().slice(0, 10);
-            console.log('[fechaFiltro inválido, asignando fecha actual]', hoy, 'obj:', obj);
+            console.warn('[fechaFiltro inválido, asignando fecha actual]', hoy, 'obj:', obj);
             return hoy;
         }
         function addFechaFiltro(obj) {
@@ -64,17 +66,29 @@ const handleWebhook = async (req, res) => {
         } else {
             dataConFechaFiltro = [addFechaFiltro(jsonData)];
         }
+        console.log('[Webhook] Datos con fechaFiltro:', dataConFechaFiltro);
         // Convertir JSON a CSV (siempre como array de objetos planos)
         const tipo = identificarTipoJson(jsonData);
+        console.log('[Webhook] Tipo identificado:', tipo);
         if (!tipo) {
+            console.error('[Webhook] No se pudo identificar el tipo de datos del JSON recibido');
             return res.status(400).json({
                 success: false,
                 message: 'No se pudo identificar el tipo de datos del JSON recibido'
             });
         }
+        // Si es ticket, agregar campos cerrado y fechaCierre
+        if (tipo === 'ticket') {
+            dataConFechaFiltro = dataConFechaFiltro.map(ticket => {
+                const cierre = detectarCierreTicket(ticket);
+                console.log(`[Webhook] Ticket ${ticket['content.sequentialId'] || ''} cerrado:`, cierre);
+                return { ...ticket, cerrado: cierre.cerrado, fechaCierre: cierre.fechaCierre };
+            });
+        }
         const carpeta = obtenerRutaCarpeta(tipo);
         const nombreArchivo = generarNombreArchivo(tipo);
         const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
+        console.log('[Webhook] Guardando CSV en:', outputPath);
         await convertJsonToCsv(dataConFechaFiltro, outputPath);
 
         res.status(200).json({

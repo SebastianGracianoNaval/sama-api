@@ -180,11 +180,13 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
     try {
         const archivos = fs.readdirSync(directorio)
             .filter(archivo => archivo.endsWith('.csv'));
+        console.log('[consolidarTicketsCsvs] Archivos encontrados:', archivos);
         if (archivos.length === 0) {
             throw new Error('No hay archivos CSV para consolidar');
         }
         let ticketsPorId = {};
         let encabezados = null;
+        let totalProcesados = 0, totalCerrados = 0, totalDescartados = 0;
         for (const archivo of archivos) {
             const rutaArchivo = path.join(directorio, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
@@ -199,21 +201,40 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 encabezados = Object.keys(records[0] || {}).join(',');
             }
             for (const row of records) {
-                // Solo considerar si tiene sequentialId
+                totalProcesados++;
+                // Solo considerar si tiene sequentialId y está cerrado
                 const seqId = row['content.sequentialId'];
-                if (!seqId) continue;
-                // Filtrar por fecha si corresponde
-                if (fechas && fechas.fechaInicio && fechas.fechaFin) {
-                    if (!row.fechaFiltro || !fechaEnRango(row.fechaFiltro, fechas)) continue;
+                if (!seqId) {
+                    totalDescartados++;
+                    console.warn(`[consolidarTicketsCsvs] Ticket descartado por falta de sequentialId:`, row);
+                    continue;
                 }
-                // Guardar solo el último ticket por sequentialId (por storageDate)
+                if (row.cerrado !== 'true' && row.cerrado !== true) {
+                    totalDescartados++;
+                    console.log(`[consolidarTicketsCsvs] Ticket ${seqId} descartado: no está cerrado.`);
+                    continue;
+                }
+                // Filtrar por fecha si corresponde (usar fechaCierre si existe, sino fechaFiltro)
+                const fechaParaFiltro = row.fechaCierre || row.fechaFiltro;
+                if (fechas && fechas.fechaInicio && fechas.fechaFin) {
+                    if (!fechaParaFiltro || !fechaEnRango(fechaParaFiltro, fechas)) {
+                        totalDescartados++;
+                        console.log(`[consolidarTicketsCsvs] Ticket ${seqId} descartado por fecha fuera de rango (${fechaParaFiltro}).`);
+                        continue;
+                    }
+                }
+                // Guardar solo el último ticket cerrado por sequentialId (por fechaCierre o storageDate)
                 const prev = ticketsPorId[seqId];
-                if (!prev || (row['content.storageDate'] && prev['content.storageDate'] < row['content.storageDate'])) {
+                const fechaActual = new Date(row.fechaCierre || row['content.storageDate'] || row.fechaFiltro || 0).getTime();
+                const fechaPrev = prev ? new Date(prev.fechaCierre || prev['content.storageDate'] || prev.fechaFiltro || 0).getTime() : 0;
+                if (!prev || fechaActual > fechaPrev) {
                     ticketsPorId[seqId] = row;
+                    totalCerrados++;
                 }
             }
         }
         const tickets = Object.values(ticketsPorId);
+        console.log(`[consolidarTicketsCsvs] Total procesados: ${totalProcesados}, cerrados exportados: ${tickets.length}, descartados: ${totalDescartados}`);
         if (tickets.length === 0) {
             throw new Error('No hay datos para el período especificado');
         }
@@ -226,8 +247,10 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         const rutaConsolidada = path.join(carpetaReportes, `ticket-consolidado-${timestamp}.csv`);
         // Usar convertJsonToCsv para mantener consistencia de campos
         await convertJsonToCsv(tickets, rutaConsolidada);
+        console.log('[consolidarTicketsCsvs] Archivo consolidado generado en:', rutaConsolidada);
         return rutaConsolidada;
     } catch (error) {
+        console.error('[consolidarTicketsCsvs] Error:', error);
         throw error;
     }
 };
