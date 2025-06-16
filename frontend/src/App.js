@@ -1,26 +1,41 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { BrowserRouter as Router } from 'react-router-dom';
 import Home from './pages/Home';
 import Header from './components/Header';
 
-const theme = createTheme({
+const getDesignTokens = (mode) => ({
   palette: {
-    mode: 'light',
+    mode,
     primary: {
-      main: '#1976d2',
+      main: '#003366',
     },
     secondary: {
-      main: '#dc004e',
+      main: '#4CAF50',
+    },
+    background: {
+      default: mode === 'dark' ? '#181C23' : '#F2F2F2',
+      paper: mode === 'dark' ? '#23272F' : '#fff',
+    },
+    text: {
+      primary: mode === 'dark' ? '#F2F2F2' : '#222222',
+      secondary: mode === 'dark' ? '#B0B0B0' : '#666666',
     },
   },
 });
 
 function App() {
+  const [mode, setMode] = useState('light');
+  const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);
+
+  const toggleMode = () => {
+    setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Header />
+      <Header mode={mode} toggleMode={toggleMode} />
       <Router>
         <Home />
       </Router>
