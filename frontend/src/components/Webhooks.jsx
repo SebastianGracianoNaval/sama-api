@@ -87,7 +87,7 @@ const Webhooks = () => {
               >
                 <IconButton
                   size="small"
-                  sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2, color: theme.palette.mode === 'dark' ? '#fff' : '#333' }}
+                  sx={{ position: 'sticky', top: 8, right: 8, float: 'right', zIndex: 2, bgcolor: 'background.paper', boxShadow: 1 }}
                   onClick={() => {
                     navigator.clipboard.writeText(JSON.stringify(wh.body, null, 2));
                     showToast('Copiado al portapapeles', 'success');
