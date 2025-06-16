@@ -18,17 +18,16 @@ async function handleBlobResponse(promise) {
       let errorMsg = 'Error al descargar el archivo';
       try {
         const json = JSON.parse(text);
-        errorMsg = json.error || json.message || errorMsg;
+        if (json.error === 'No hay datos para el período especificado') {
+          errorMsg = 'No hay datos disponibles para las fechas seleccionadas.';
+        } else {
+          errorMsg = json.error || json.message || errorMsg;
+        }
       } catch {
-        // Si es HTML, mostrar mensaje claro
         if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
-          if (text.includes('Cannot GET')) {
-            errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
-          } else {
-            errorMsg = 'Error inesperado del servidor (HTML recibido).';
-          }
+          errorMsg = 'Ocurrió un error inesperado en el servidor.';
         } else if (text.includes('Cannot GET')) {
-          errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
+          errorMsg = 'No se pudo conectar con el servidor. Por favor, intente más tarde o contacte a soporte.';
         } else {
           errorMsg = text;
         }
@@ -44,16 +43,16 @@ async function handleBlobResponse(promise) {
           const text = await error.response.data.text();
           try {
             const json = JSON.parse(text);
-            errorMsg = json.error || json.message || errorMsg;
+            if (json.error === 'No hay datos para el período especificado') {
+              errorMsg = 'No hay datos disponibles para las fechas seleccionadas.';
+            } else {
+              errorMsg = json.error || json.message || errorMsg;
+            }
           } catch {
             if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
-              if (text.includes('Cannot GET')) {
-                errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
-              } else {
-                errorMsg = 'Error inesperado del servidor (HTML recibido).';
-              }
+              errorMsg = 'Ocurrió un error inesperado en el servidor.';
             } else if (text.includes('Cannot GET')) {
-              errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
+              errorMsg = 'No se pudo conectar con el servidor. Por favor, intente más tarde o contacte a soporte.';
             } else {
               errorMsg = text;
             }
@@ -62,10 +61,21 @@ async function handleBlobResponse(promise) {
           errorMsg = 'Error desconocido al procesar la respuesta del servidor.';
         }
       } else if (typeof error.response.data === 'object') {
-        errorMsg = error.response.data.error || error.response.data.message || errorMsg;
+        if (error.response.data.error === 'No hay datos para el período especificado') {
+          errorMsg = 'No hay datos disponibles para las fechas seleccionadas.';
+        } else {
+          errorMsg = error.response.data.error || error.response.data.message || errorMsg;
+        }
       }
       throw new Error(errorMsg);
     } else if (error.message) {
+      if (
+        error.message.includes('Network Error') ||
+        error.message.includes('Failed to fetch') ||
+        error.message.includes('timeout')
+      ) {
+        throw new Error('No se pudo conectar con el servidor. Por favor, intente más tarde o contacte a soporte.');
+      }
       throw new Error(error.message);
     } else {
       throw new Error('Error al descargar el archivo');

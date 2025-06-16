@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, Divider, useTheme, Paper, Button, TextField, Stack } from '@mui/material';
+import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, Divider, useTheme, Paper, Button, TextField } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DescriptionIcon from '@mui/icons-material/Description';
 import HistoryIcon from '@mui/icons-material/History';
@@ -68,8 +68,8 @@ const ReportesLayout = () => {
       return;
     }
     if (fechaInicio && fechaFin) {
-      if (fechaInicio > fechaFin) {
-        showToast('La fecha de inicio no puede ser posterior a la fecha fin.', 'error');
+      if (fechaFin < fechaInicio) {
+        showToast('La fecha fin no puede ser anterior a la fecha inicio.', 'error');
         return;
       }
       if (fechaInicio > hoy || fechaFin > hoy) {
@@ -88,8 +88,7 @@ const ReportesLayout = () => {
       saveAs(new Blob([response.data]), `${selected.toLowerCase()}_${fechaInicio || 'all'}_${fechaFin || 'all'}.csv`);
     } catch (error) {
       console.error('Error downloading file:', error);
-      const backendMsg = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Error al descargar el archivo';
-      showToast(backendMsg, 'error');
+      showToast(error.message || 'Error al descargar el archivo', 'error');
     } finally {
       setDownloading('');
     }

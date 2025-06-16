@@ -26,17 +26,24 @@ const Reportes = () => {
 
   const validarFechas = () => {
     const hoy = new Date().toISOString().slice(0, 10);
-    
-    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
-      showToast('La fecha de inicio no puede ser posterior a la fecha fin.', 'error');
+    if (fechaInicio && !fechaFin) {
+      showToast('Por favor, especifique fecha fin.', 'error');
       return false;
     }
-    
-    if ((fechaInicio && fechaInicio > hoy) || (fechaFin && fechaFin > hoy)) {
-      showToast('No se pueden seleccionar fechas futuras.', 'error');
+    if (fechaFin && !fechaInicio) {
+      showToast('Por favor, especifique fecha inicio.', 'error');
       return false;
     }
-    
+    if (fechaInicio && fechaFin) {
+      if (fechaFin < fechaInicio) {
+        showToast('La fecha fin no puede ser anterior a la fecha inicio.', 'error');
+        return false;
+      }
+      if (fechaInicio > hoy || fechaFin > hoy) {
+        showToast('No se pueden seleccionar fechas futuras.', 'error');
+        return false;
+      }
+    }
     return true;
   };
 
@@ -74,12 +81,7 @@ const Reportes = () => {
       
       showToast('Archivo descargado correctamente', 'success');
     } catch (error) {
-      const backendError = error.response?.data?.error;
-      if (backendError === 'No hay datos para el período especificado') {
-        showToast('No hay datos para el período especificado', 'error');
-      } else {
-        showToast('Error al descargar el archivo', 'error');
-      }
+      showToast(error.message || 'Error al descargar el archivo', 'error');
     }
   };
 
