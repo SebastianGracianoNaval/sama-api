@@ -185,7 +185,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             throw new Error('No hay archivos CSV para consolidar');
         }
 
-        // Leer eventos y mensajes para asociar cierres
+        // Leer eventos y mensajes para asociar cierres y conversación
         const eventosDir = path.join(path.dirname(directorio), 'eventos');
         const mensajesDir = path.join(path.dirname(directorio), 'mensajes');
         const eventos = [];
@@ -237,38 +237,41 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 relax_quotes: true
             });
             if (!encabezados && records.length > 0) {
-                encabezados = Object.keys(records[0] || {}).join(',');
+                encabezados = Object.keys(records[0] || {});
             }
 
             for (const row of records) {
                 totalProcesados++;
                 const seqId = row['content.sequentialId'];
-                if (!seqId) {
+                const contacto = (row['content.customerIdentity'] || row['from'] || '').split('@')[0];
+                if (!seqId || !contacto) {
                     totalDescartados++;
-                    console.warn(`[consolidarTicketsCsvs] Ticket descartado por falta de sequentialId:`, row);
+                    console.warn(`[consolidarTicketsCsvs] Ticket descartado por falta de sequentialId/contacto:`, row);
                     continue;
                 }
 
-                // Buscar eventos y mensajes relacionados
+                // Buscar eventos y mensajes relacionados para cierre
                 const eventosRelacionados = eventos.filter(e => 
-                    e['extras.#previousStateName']?.includes('Atendimento humano') ||
-                    e['extras.#stateName'] === '4.0 - Encuesta'
+                    e['identity']?.split('@')[0] === contacto &&
+                    (e['extras.#previousStateName']?.toLowerCase().includes('atencion humana') ||
+                     e['extras.#stateName'] === '4.0 - Encuesta')
                 );
-                const mensajesRelacionados = mensajes.filter(m => 
-                    m.content?.includes('finalizo el ticket') ||
-                    m['metadata.#stateName'] === '4.0 - Encuesta'
+                const mensajesRelacionadosCierre = mensajes.filter(m => 
+                    (m['to']?.split('@')[0] === contacto || m['from']?.split('@')[0] === contacto) &&
+                    (m.content?.toLowerCase().includes('finalizo el ticket') ||
+                     m['metadata.#stateName'] === '4.0 - Encuesta')
                 );
 
                 // Si hay eventos o mensajes de cierre, marcar el ticket como cerrado
-                if (eventosRelacionados.length > 0 || mensajesRelacionados.length > 0) {
+                if (eventosRelacionados.length > 0 || mensajesRelacionadosCierre.length > 0) {
                     row.cerrado = true;
                     const fechaCierre = eventosRelacionados[0]?.storageDate || 
-                                      mensajesRelacionados[0]?.['metadata.#envelope.storageDate'] ||
+                                      mensajesRelacionadosCierre[0]?.['metadata.#envelope.storageDate'] ||
                                       row['content.storageDate'];
                     row.fechaCierre = fechaCierre;
                 }
 
-                // Filtrar por fecha si corresponde
+                // Filtrar por fecha si corresponde (usar fechaCierre si existe, sino fechaFiltro)
                 const fechaParaFiltro = row.fechaCierre || row.fechaFiltro;
                 if (fechas && fechas.fechaInicio && fechas.fechaFin) {
                     if (!fechaParaFiltro || !fechaEnRango(fechaParaFiltro, fechas)) {
@@ -277,6 +280,31 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                         continue;
                     }
                 }
+
+                // Buscar mensajes de la conversación del ticket
+                // Filtrar mensajes por contacto y por rango de fechas del ticket
+                let fechaInicioTicket = row['content.storageDate'] || row.fechaFiltro;
+                let fechaFinTicket = row.fechaCierre || row.fechaFiltro;
+                const mensajesConversacion = mensajes.filter(m => {
+                    const contactoMsg = (m['to']?.split('@')[0] === contacto || m['from']?.split('@')[0] === contacto);
+                    let fechaMsg = m['metadata.#envelope.storageDate'] || m['storageDate'] || m['fechaFiltro'];
+                    if (!fechaMsg) return false;
+                    // Normalizar a formato ISO si es posible
+                    fechaMsg = fechaMsg.length > 10 ? fechaMsg : fechaMsg + 'T00:00:00Z';
+                    return contactoMsg && fechaMsg >= fechaInicioTicket && fechaMsg <= fechaFinTicket;
+                });
+                // Ordenar mensajes por fecha
+                mensajesConversacion.sort((a, b) => {
+                    const fa = new Date(a['metadata.#envelope.storageDate'] || a['storageDate'] || a['fechaFiltro'] || 0).getTime();
+                    const fb = new Date(b['metadata.#envelope.storageDate'] || b['storageDate'] || b['fechaFiltro'] || 0).getTime();
+                    return fa - fb;
+                });
+                // Concatenar mensajes con fecha/hora
+                const conversacion = mensajesConversacion.map(m => {
+                    const fecha = m['metadata.#envelope.storageDate'] || m['storageDate'] || m['fechaFiltro'] || '';
+                    return `[${fecha}] ${m.content || ''}`;
+                }).join('\n');
+                row.conversacion = conversacion;
 
                 // Guardar solo el último ticket por sequentialId
                 const prev = ticketsPorId[seqId];
@@ -301,8 +329,15 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         if (!fs.existsSync(carpetaReportes)) {
             fs.mkdirSync(carpetaReportes, { recursive: true });
         }
+        // Asegurar que la columna conversacion esté al final
+        const encabezadosFinal = [...encabezados.filter(e => e !== 'conversacion'), 'conversacion'];
+        const csvLines = [encabezadosFinal.join(',')];
+        for (const t of tickets) {
+            const line = encabezadosFinal.map(col => t[col] !== undefined ? (`"${String(t[col]).replace(/"/g, '""')}"`) : '').join(',');
+            csvLines.push(line);
+        }
         const rutaConsolidada = path.join(carpetaReportes, `ticket-consolidado-${timestamp}.csv`);
-        await convertJsonToCsv(tickets, rutaConsolidada);
+        fs.writeFileSync(rutaConsolidada, csvLines.join('\n'));
         console.log('[consolidarTicketsCsvs] Archivo consolidado generado en:', rutaConsolidada);
         return rutaConsolidada;
     } catch (error) {
