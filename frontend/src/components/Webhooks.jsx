@@ -8,7 +8,8 @@ import {
   ListItem,
   ListItemText,
   Chip,
-  IconButton
+  IconButton,
+  useTheme
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { webhookService } from '../services/api';
@@ -17,6 +18,7 @@ import { showToast } from './Toast';
 const Webhooks = () => {
   const [webhooks, setWebhooks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const theme = useTheme();
 
   const cargarWebhooks = async () => {
     setLoading(true);
@@ -76,13 +78,15 @@ const Webhooks = () => {
                 sx={{ 
                   p: 2, 
                   width: '100%', 
-                  bgcolor: 'grey.50',
+                  bgcolor: theme.palette.mode === 'dark' ? '#23272F' : 'grey.50',
                   maxHeight: '200px',
                   overflow: 'auto'
                 }}
               >
-                <pre style={{ margin: 0 }}>
-                  <code>{JSON.stringify(wh.body, null, 2)}</code>
+                <pre style={{ margin: 0, background: 'none', color: theme.palette.text.primary }}>
+                  <code style={{ background: 'none', color: theme.palette.text.primary }}>
+                    {JSON.stringify(wh.body, null, 2)}
+                  </code>
                 </pre>
               </Paper>
             </ListItem>
