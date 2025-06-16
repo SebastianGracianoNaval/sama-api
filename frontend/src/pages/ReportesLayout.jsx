@@ -59,8 +59,12 @@ const ReportesLayout = () => {
 
   const handleDownloadByFilter = async () => {
     const hoy = new Date().toISOString().slice(0, 10);
-    if ((fechaInicio && !fechaFin) || (!fechaInicio && fechaFin)) {
-      showToast('Debes seleccionar ambas fechas para filtrar.', 'error');
+    if (fechaInicio && !fechaFin) {
+      showToast('Por favor, especifique fecha fin.', 'error');
+      return;
+    }
+    if (fechaFin && !fechaInicio) {
+      showToast('Por favor, especifique fecha inicio.', 'error');
       return;
     }
     if (fechaInicio && fechaFin) {

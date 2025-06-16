@@ -12,18 +12,22 @@ const api = axios.create({
 async function handleBlobResponse(promise) {
   try {
     const response = await promise;
-    // Si la respuesta es un blob pero en realidad es un error HTML o JSON, intentar leerlo
     const contentType = response.headers['content-type'];
     if (contentType && (contentType.includes('application/json') || contentType.includes('text/html'))) {
-      // Leer el blob como texto
       const text = await response.data.text();
       let errorMsg = 'Error al descargar el archivo';
       try {
         const json = JSON.parse(text);
         errorMsg = json.error || json.message || errorMsg;
       } catch {
-        // Si no es JSON, mostrar el texto plano o mensaje genérico
-        if (text.includes('Cannot GET')) {
+        // Si es HTML, mostrar mensaje claro
+        if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
+          if (text.includes('Cannot GET')) {
+            errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
+          } else {
+            errorMsg = 'Error inesperado del servidor (HTML recibido).';
+          }
+        } else if (text.includes('Cannot GET')) {
           errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
         } else {
           errorMsg = text;
@@ -33,16 +37,29 @@ async function handleBlobResponse(promise) {
     }
     return response;
   } catch (error) {
-    // Si es un error de red o axios
     if (error.response && error.response.data) {
       let errorMsg = 'Error al descargar el archivo';
       if (error.response.data instanceof Blob) {
         try {
           const text = await error.response.data.text();
-          const json = JSON.parse(text);
-          errorMsg = json.error || json.message || errorMsg;
+          try {
+            const json = JSON.parse(text);
+            errorMsg = json.error || json.message || errorMsg;
+          } catch {
+            if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
+              if (text.includes('Cannot GET')) {
+                errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
+              } else {
+                errorMsg = 'Error inesperado del servidor (HTML recibido).';
+              }
+            } else if (text.includes('Cannot GET')) {
+              errorMsg = 'El recurso solicitado no existe o el endpoint es incorrecto.';
+            } else {
+              errorMsg = text;
+            }
+          }
         } catch {
-          errorMsg = await error.response.data.text();
+          errorMsg = 'Error desconocido al procesar la respuesta del servidor.';
         }
       } else if (typeof error.response.data === 'object') {
         errorMsg = error.response.data.error || error.response.data.message || errorMsg;
