@@ -36,7 +36,12 @@ export const reportService = {
       responseType: 'blob'
     }),
   getReportesList: () => api.get('/descargar/reportes'),
-  downloadReporte: (filename) => api.get(`/descargar/reportes/${filename}`, { responseType: 'blob' })
+  downloadReporte: (filename) => api.get(`/descargar/reportes/${filename}`, { responseType: 'blob' }),
+  downloadReporteByType: (tipo, fechaInicio, fechaFin) => 
+    api.get(`/descargar/${tipo}`, {
+      params: { fechaInicio, fechaFin },
+      responseType: 'blob'
+    }),
 };
 
 export default api; 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, Divider, useTheme, Paper, Button } from '@mui/material';
+import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, Divider, useTheme, Paper, Button, TextField, Stack } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DescriptionIcon from '@mui/icons-material/Description';
 import HistoryIcon from '@mui/icons-material/History';
@@ -21,6 +21,8 @@ const ReportesLayout = () => {
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState('');
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -42,7 +44,27 @@ const ReportesLayout = () => {
       saveAs(new Blob([response.data]), filename);
     } catch (error) {
       console.error('Error downloading file:', error);
-      alert('Error al descargar el archivo');
+      const backendMsg = error?.response?.data?.error || error?.response?.data?.message || 'Error al descargar el archivo';
+      alert(backendMsg);
+    } finally {
+      setDownloading('');
+    }
+  };
+
+  const handleDownloadByFilter = async () => {
+    setDownloading('filtro');
+    try {
+      let response;
+      if (selected === 'Tickets') {
+        response = await reportService.downloadReporteByType('tickets', fechaInicio, fechaFin);
+      } else if (selected === 'Plantillas') {
+        response = await reportService.downloadReporteByType('plantillas', fechaInicio, fechaFin);
+      }
+      saveAs(new Blob([response.data]), `${selected.toLowerCase()}_${fechaInicio}_${fechaFin}.xlsx`);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      const backendMsg = error?.response?.data?.error || error?.response?.data?.message || 'Error al descargar el archivo';
+      alert(backendMsg);
     } finally {
       setDownloading('');
     }
@@ -115,8 +137,60 @@ const ReportesLayout = () => {
           </Box>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 4, bgcolor: 'background.default' }}>
-        <Toolbar />
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, pt: 1, bgcolor: 'background.default' }}>
+        <Toolbar sx={{ minHeight: { xs: 40, sm: 15 } }} />
+        <Box sx={{ mb: 3, display: selected ? 'block' : 'none' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0, mb: 1, pb: 1, borderBottom: theme => `1.5px solid ${theme.palette.mode === 'dark' ? '#23272F' : '#e0e0e0'}` }}>
+            {selected === 'Tickets' && <AssignmentIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
+            {selected === 'Plantillas' && <DescriptionIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
+            <Typography
+              variant="h4"
+              fontWeight={700}
+              sx={{
+                fontFamily: 'Inter, sans-serif',
+                letterSpacing: '0.5px',
+                color: theme => theme.palette.mode === 'dark' ? '#fff' : '#222',
+                mb: 0,
+              }}
+            >
+              {selected === 'Tickets' ? 'Tus tickets' : selected === 'Plantillas' ? 'Tus plantillas' : ''}
+            </Typography>
+          </Box>
+          <Typography variant="subtitle1" sx={{ color: theme => theme.palette.mode === 'dark' ? '#B0B0B0' : '#666', mb: 2, ml: 0, pl: 0, textAlign: 'left' }}>
+            {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : selected === 'Plantillas' ? 'Descargá tus plantillas filtrando por fecha.' : ''}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <TextField
+              label="Fecha inicio"
+              type="date"
+              value={fechaInicio}
+              onChange={e => setFechaInicio(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+              sx={{ minWidth: 140 }}
+              inputProps={{ max: new Date().toISOString().slice(0, 10) }}
+            />
+            <TextField
+              label="Fecha fin"
+              type="date"
+              value={fechaFin}
+              onChange={e => setFechaFin(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+              sx={{ minWidth: 140 }}
+              inputProps={{ max: new Date().toISOString().slice(0, 10) }}
+            />
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleDownloadByFilter}
+              disabled={downloading}
+              sx={{ minWidth: 120, fontWeight: 700, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2 }}
+            >
+              Descargar
+            </Button>
+          </Box>
+        </Box>
         <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <HistoryIcon color="primary" sx={{ mr: 1 }} />
