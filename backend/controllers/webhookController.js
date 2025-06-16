@@ -1,4 +1,4 @@
-const { convertJsonToCsv, consolidarCsvs, flattenObject } = require('../utils/csvUtils');
+const { convertJsonToCsv, consolidarCsvs, flattenObject, consolidarTicketsCsvs } = require('../utils/csvUtils');
 const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo } = require('../utils/blipUtils');
 const path = require('path');
 
@@ -213,7 +213,63 @@ const consolidarArchivos = async (req, res) => {
     }
 };
 
+/**
+ * Consolida los archivos CSV de tickets, deduplicando por sequentialId
+ * @param {Object} req - Objeto de solicitud Express
+ * @param {Object} res - Objeto de respuesta Express
+ */
+const consolidarTickets = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const carpeta = obtenerRutaCarpeta('ticket');
+        if (!carpeta) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error al determinar la carpeta de destino de tickets'
+            });
+        }
+        let hoy = new Date().toISOString().slice(0, 10);
+        if (fechaInicio && fechaFin) {
+            if (fechaInicio > fechaFin) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'La fecha de inicio no puede ser posterior a la fecha fin.'
+                });
+            }
+            if (fechaInicio > hoy || fechaFin > hoy) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No se pueden seleccionar fechas futuras.'
+                });
+            }
+        }
+        const pathCarpeta = path.join(__dirname, '..', carpeta);
+        const fs = require('fs');
+        if (!fs.existsSync(pathCarpeta)) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontró el directorio de tickets.'
+            });
+        }
+        const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
+        const rutaConsolidada = await consolidarTicketsCsvs(pathCarpeta, fechas);
+        res.status(200).json({
+            success: true,
+            message: 'Tickets consolidados correctamente',
+            filePath: rutaConsolidada
+        });
+    } catch (error) {
+        console.error('Error al consolidar tickets:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al consolidar los tickets',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     handleWebhook,
-    consolidarArchivos
+    consolidarArchivos,
+    consolidarTickets
 }; 

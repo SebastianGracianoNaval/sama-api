@@ -170,6 +170,68 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
     }
 };
 
+/**
+ * Consolida todos los archivos CSV de tickets en uno solo, deduplicando por sequentialId
+ * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
+ * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
+ * @returns {Promise<string>} - Ruta del archivo CSV consolidado
+ */
+const consolidarTicketsCsvs = async (directorio, fechas = null) => {
+    try {
+        const archivos = fs.readdirSync(directorio)
+            .filter(archivo => archivo.endsWith('.csv'));
+        if (archivos.length === 0) {
+            throw new Error('No hay archivos CSV para consolidar');
+        }
+        let ticketsPorId = {};
+        let encabezados = null;
+        for (const archivo of archivos) {
+            const rutaArchivo = path.join(directorio, archivo);
+            const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const records = parse(contenido, {
+                columns: true,
+                skip_empty_lines: true,
+                trim: true,
+                relax_column_count: true,
+                relax_quotes: true
+            });
+            if (!encabezados && records.length > 0) {
+                encabezados = Object.keys(records[0] || {}).join(',');
+            }
+            for (const row of records) {
+                // Solo considerar si tiene sequentialId
+                const seqId = row['content.sequentialId'];
+                if (!seqId) continue;
+                // Filtrar por fecha si corresponde
+                if (fechas && fechas.fechaInicio && fechas.fechaFin) {
+                    if (!row.fechaFiltro || !fechaEnRango(row.fechaFiltro, fechas)) continue;
+                }
+                // Guardar solo el último ticket por sequentialId (por storageDate)
+                const prev = ticketsPorId[seqId];
+                if (!prev || (row['content.storageDate'] && prev['content.storageDate'] < row['content.storageDate'])) {
+                    ticketsPorId[seqId] = row;
+                }
+            }
+        }
+        const tickets = Object.values(ticketsPorId);
+        if (tickets.length === 0) {
+            throw new Error('No hay datos para el período especificado');
+        }
+        // Crear CSV
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        if (!fs.existsSync(carpetaReportes)) {
+            fs.mkdirSync(carpetaReportes, { recursive: true });
+        }
+        const rutaConsolidada = path.join(carpetaReportes, `ticket-consolidado-${timestamp}.csv`);
+        // Usar convertJsonToCsv para mantener consistencia de campos
+        await convertJsonToCsv(tickets, rutaConsolidada);
+        return rutaConsolidada;
+    } catch (error) {
+        throw error;
+    }
+};
+
 // Función para aplanar objetos anidados
 function flattenObject(obj, prefix = '') {
     return Object.keys(obj).reduce((acc, k) => {
@@ -186,5 +248,6 @@ function flattenObject(obj, prefix = '') {
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
-    flattenObject
+    flattenObject,
+    consolidarTicketsCsvs
 }; 

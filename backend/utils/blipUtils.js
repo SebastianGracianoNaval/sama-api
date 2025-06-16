@@ -41,7 +41,8 @@ const obtenerRutaCarpeta = (tipo) => {
     const rutas = {
         mensaje: 'data/mensajes',
         evento: 'data/eventos',
-        contacto: 'data/contactos'
+        contacto: 'data/contactos',
+        ticket: 'data/tickets'
     };
     return rutas[tipo] || null;
 };

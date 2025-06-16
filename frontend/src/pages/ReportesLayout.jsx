@@ -7,6 +7,7 @@ import { reportService } from '../services/api';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
 import { saveAs } from 'file-saver';
+import { showToast } from '../components/Toast';
 
 const drawerWidth = 220;
 
@@ -45,7 +46,7 @@ const ReportesLayout = () => {
     } catch (error) {
       console.error('Error downloading file:', error);
       const backendMsg = error?.response?.data?.error || error?.response?.data?.message || 'Error al descargar el archivo';
-      alert(backendMsg);
+      showToast(backendMsg, 'error');
     } finally {
       setDownloading('');
     }
@@ -64,7 +65,7 @@ const ReportesLayout = () => {
     } catch (error) {
       console.error('Error downloading file:', error);
       const backendMsg = error?.response?.data?.error || error?.response?.data?.message || 'Error al descargar el archivo';
-      alert(backendMsg);
+      showToast(backendMsg, 'error');
     } finally {
       setDownloading('');
     }
