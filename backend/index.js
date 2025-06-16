@@ -265,6 +265,23 @@ app.get('/api/reportes', reportController.getReportesList);
 app.get('/api/reportes/download/:filename', reportController.downloadReporte);
 app.get('/api/reportes/:tipo', reportController.downloadReporteByType);
 
+// Agregar ruta para tickets
+app.get('/descargar/tickets', async (req, res) => {
+    const { fechaInicio, fechaFin } = req.query;
+    if (fechaInicio && fechaFin) {
+        const fechasValidas = validarFechas(fechaInicio, fechaFin);
+        if (!fechasValidas) {
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
+            });
+        }
+        await descargarCsvConsolidado('ticket', res, fechasValidas);
+    } else {
+        await descargarCsvConsolidado('ticket', res);
+    }
+});
+
 // Iniciar el servidor
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);

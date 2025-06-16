@@ -63,36 +63,55 @@ const generarNombreArchivo = (tipo) => {
  * @returns {Object} - Objeto con { cerrado: boolean, fechaCierre: string | null }
  */
 const detectarCierreTicket = (ticket) => {
-    // Patrones de cierre: status, previousStateName, state, etc.
+    // Verificar si ya tiene campos de cierre
+    if (ticket.cerrado === true || ticket.cerrado === 'true') {
+        return {
+            cerrado: true,
+            fechaCierre: ticket.fechaCierre || ticket['content.storageDate'] || ticket.fechaFiltro
+        };
+    }
+
+    // Verificar patrones de cierre en el ticket
+    const status = ticket['content.status'] || ticket.status;
+    const previousStateName = ticket['content.previousStateName'] || ticket.previousStateName;
+    const state = ticket['content.state'] || ticket.state;
+    const content = ticket['content.customerInput.value'] || ticket.content;
+
+    // Patrones de cierre
     const patronesCierre = [
-        // Status
-        ticket.status === 'CLOSED' || ticket.status === 'FINALIZADO' || ticket.status === 'RESOLVED',
-        // previousStateName
-        ticket.previousStateName && ticket.previousStateName.toLowerCase().includes('atencion humana'),
-        ticket.previousStateName && ticket.previousStateName.toLowerCase().includes('cerrado'),
-        // state
-        ticket.state && ticket.state.toLowerCase().includes('cerrado'),
-        // Evento de cierre
-        ticket.type === 'ticket_closed' || ticket.type === 'ticket_finalizado'
+        status === 'CLOSED',
+        status === 'FINALIZADO',
+        previousStateName?.includes('Atencion Humana'),
+        state === 'Cerrado',
+        state === 'Finalizado',
+        content?.includes('finalizo el ticket'),
+        ticket['extras.#stateName'] === '4.0 - Encuesta',
+        ticket['metadata.#stateName'] === '4.0 - Encuesta'
     ];
 
-    // Si alguno de los patrones indica cierre, marcar como cerrado
     if (patronesCierre.some(patron => patron)) {
-        return { cerrado: true, fechaCierre: ticket.fechaFiltro || new Date().toISOString().slice(0, 10) };
+        return {
+            cerrado: true,
+            fechaCierre: ticket['content.storageDate'] || ticket.storageDate || ticket.fechaFiltro
+        };
     }
 
-    // Timeout: si el ticket tiene más de 23 horas y 58 minutos, considerarlo cerrado
-    const fechaCreacion = ticket.fechaFiltro || ticket.storageDate || ticket.date_created;
-    if (fechaCreacion) {
-        const fechaCreacionMs = new Date(fechaCreacion).getTime();
-        const ahoraMs = new Date().getTime();
-        const diffHoras = (ahoraMs - fechaCreacionMs) / (1000 * 60 * 60);
-        if (diffHoras >= 23.966) { // 23 horas y 58 minutos
-            return { cerrado: true, fechaCierre: new Date().toISOString().slice(0, 10) };
-        }
+    // Verificar timeout de 23h58m
+    const fechaCreacion = new Date(ticket['content.storageDate'] || ticket.storageDate || ticket.fechaFiltro);
+    const ahora = new Date();
+    const diffHoras = (ahora - fechaCreacion) / (1000 * 60 * 60);
+    
+    if (diffHoras >= 23.966) { // 23 horas y 58 minutos
+        return {
+            cerrado: true,
+            fechaCierre: ahora.toISOString()
+        };
     }
 
-    return { cerrado: false, fechaCierre: null };
+    return {
+        cerrado: false,
+        fechaCierre: null
+    };
 };
 
 module.exports = {

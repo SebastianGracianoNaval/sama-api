@@ -184,9 +184,48 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         if (archivos.length === 0) {
             throw new Error('No hay archivos CSV para consolidar');
         }
+
+        // Leer eventos y mensajes para asociar cierres
+        const eventosDir = path.join(path.dirname(directorio), 'eventos');
+        const mensajesDir = path.join(path.dirname(directorio), 'mensajes');
+        const eventos = [];
+        const mensajes = [];
+
+        if (fs.existsSync(eventosDir)) {
+            const archivosEventos = fs.readdirSync(eventosDir).filter(archivo => archivo.endsWith('.csv'));
+            for (const archivo of archivosEventos) {
+                const contenido = fs.readFileSync(path.join(eventosDir, archivo), 'utf-8');
+                const records = parse(contenido, {
+                    columns: true,
+                    skip_empty_lines: true,
+                    trim: true,
+                    relax_column_count: true,
+                    relax_quotes: true
+                });
+                eventos.push(...records);
+            }
+        }
+
+        if (fs.existsSync(mensajesDir)) {
+            const archivosMensajes = fs.readdirSync(mensajesDir).filter(archivo => archivo.endsWith('.csv'));
+            for (const archivo of archivosMensajes) {
+                const contenido = fs.readFileSync(path.join(mensajesDir, archivo), 'utf-8');
+                const records = parse(contenido, {
+                    columns: true,
+                    skip_empty_lines: true,
+                    trim: true,
+                    relax_column_count: true,
+                    relax_quotes: true
+                });
+                mensajes.push(...records);
+            }
+        }
+
         let ticketsPorId = {};
         let encabezados = null;
         let totalProcesados = 0, totalCerrados = 0, totalDescartados = 0;
+
+        // Procesar tickets
         for (const archivo of archivos) {
             const rutaArchivo = path.join(directorio, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
@@ -200,21 +239,36 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             if (!encabezados && records.length > 0) {
                 encabezados = Object.keys(records[0] || {}).join(',');
             }
+
             for (const row of records) {
                 totalProcesados++;
-                // Solo considerar si tiene sequentialId y está cerrado
                 const seqId = row['content.sequentialId'];
                 if (!seqId) {
                     totalDescartados++;
                     console.warn(`[consolidarTicketsCsvs] Ticket descartado por falta de sequentialId:`, row);
                     continue;
                 }
-                if (row.cerrado !== 'true' && row.cerrado !== true) {
-                    totalDescartados++;
-                    console.log(`[consolidarTicketsCsvs] Ticket ${seqId} descartado: no está cerrado.`);
-                    continue;
+
+                // Buscar eventos y mensajes relacionados
+                const eventosRelacionados = eventos.filter(e => 
+                    e['extras.#previousStateName']?.includes('Atendimento humano') ||
+                    e['extras.#stateName'] === '4.0 - Encuesta'
+                );
+                const mensajesRelacionados = mensajes.filter(m => 
+                    m.content?.includes('finalizo el ticket') ||
+                    m['metadata.#stateName'] === '4.0 - Encuesta'
+                );
+
+                // Si hay eventos o mensajes de cierre, marcar el ticket como cerrado
+                if (eventosRelacionados.length > 0 || mensajesRelacionados.length > 0) {
+                    row.cerrado = true;
+                    const fechaCierre = eventosRelacionados[0]?.storageDate || 
+                                      mensajesRelacionados[0]?.['metadata.#envelope.storageDate'] ||
+                                      row['content.storageDate'];
+                    row.fechaCierre = fechaCierre;
                 }
-                // Filtrar por fecha si corresponde (usar fechaCierre si existe, sino fechaFiltro)
+
+                // Filtrar por fecha si corresponde
                 const fechaParaFiltro = row.fechaCierre || row.fechaFiltro;
                 if (fechas && fechas.fechaInicio && fechas.fechaFin) {
                     if (!fechaParaFiltro || !fechaEnRango(fechaParaFiltro, fechas)) {
@@ -223,7 +277,8 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                         continue;
                     }
                 }
-                // Guardar solo el último ticket cerrado por sequentialId (por fechaCierre o storageDate)
+
+                // Guardar solo el último ticket por sequentialId
                 const prev = ticketsPorId[seqId];
                 const fechaActual = new Date(row.fechaCierre || row['content.storageDate'] || row.fechaFiltro || 0).getTime();
                 const fechaPrev = prev ? new Date(prev.fechaCierre || prev['content.storageDate'] || prev.fechaFiltro || 0).getTime() : 0;
@@ -233,11 +288,13 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 }
             }
         }
+
         const tickets = Object.values(ticketsPorId);
         console.log(`[consolidarTicketsCsvs] Total procesados: ${totalProcesados}, cerrados exportados: ${tickets.length}, descartados: ${totalDescartados}`);
         if (tickets.length === 0) {
             throw new Error('No hay datos para el período especificado');
         }
+
         // Crear CSV
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
@@ -245,7 +302,6 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             fs.mkdirSync(carpetaReportes, { recursive: true });
         }
         const rutaConsolidada = path.join(carpetaReportes, `ticket-consolidado-${timestamp}.csv`);
-        // Usar convertJsonToCsv para mantener consistencia de campos
         await convertJsonToCsv(tickets, rutaConsolidada);
         console.log('[consolidarTicketsCsvs] Archivo consolidado generado en:', rutaConsolidada);
         return rutaConsolidada;
