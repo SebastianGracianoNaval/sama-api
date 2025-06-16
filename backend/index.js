@@ -254,6 +254,36 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
     }
 }
 
+const reportesDir = path.join(__dirname, 'data', 'reportes');
+if (!fs.existsSync(reportesDir)) {
+  fs.mkdirSync(reportesDir, { recursive: true });
+}
+
+// Endpoint para listar archivos de reportes
+app.get('/api/reportes', (req, res) => {
+  try {
+    const files = fs.readdirSync(reportesDir)
+      .filter(f => f.endsWith('.csv'))
+      .map(f => ({
+        name: f,
+        fecha: fs.statSync(path.join(reportesDir, f)).mtime
+      }));
+    res.json({ success: true, files });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error al listar reportes', error: err.message });
+  }
+});
+
+// Endpoint para descargar un archivo de reporte
+app.get('/api/reportes/:filename', (req, res) => {
+  const file = req.params.filename;
+  const filePath = path.join(reportesDir, file);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
+  }
+  res.download(filePath);
+});
+
 // Iniciar el servidor
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);

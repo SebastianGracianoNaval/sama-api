@@ -37,4 +37,14 @@ export const reportService = {
     }),
 };
 
+export const fetchReportesList = async () => {
+  const res = await axios.get('/api/reportes');
+  return res.data;
+};
+
+export const downloadReporte = async (filename) => {
+  const res = await axios.get(`/api/reportes/${filename}`, { responseType: 'blob' });
+  return res.data;
+};
+
 export default api; 
