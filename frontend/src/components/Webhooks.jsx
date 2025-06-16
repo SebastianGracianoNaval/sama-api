@@ -12,6 +12,7 @@ import {
   useTheme
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { webhookService } from '../services/api';
 import { showToast } from './Toast';
 
@@ -80,9 +81,21 @@ const Webhooks = () => {
                   width: '100%', 
                   bgcolor: theme.palette.mode === 'dark' ? '#23272F' : 'grey.50',
                   maxHeight: '200px',
-                  overflow: 'auto'
+                  overflow: 'auto',
+                  position: 'relative'
                 }}
               >
+                <IconButton
+                  size="small"
+                  sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2, color: theme.palette.mode === 'dark' ? '#fff' : '#333' }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(wh.body, null, 2));
+                    showToast('Copiado al portapapeles', 'success');
+                  }}
+                  aria-label="Copiar JSON"
+                >
+                  <ContentCopyIcon fontSize="small" />
+                </IconButton>
                 <pre style={{ margin: 0, background: 'none', color: theme.palette.text.primary }}>
                   <code style={{ background: 'none', color: theme.palette.text.primary }}>
                     {JSON.stringify(wh.body, null, 2)}

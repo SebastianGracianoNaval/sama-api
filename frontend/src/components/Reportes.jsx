@@ -74,10 +74,16 @@ const Reportes = () => {
       
       showToast('Archivo descargado correctamente', 'success');
     } catch (error) {
+      const backendError = error.response?.data?.error;
       const backendMsg = error.response?.data?.message;
-      if (backendMsg === 'No hay datos para el período especificado') {
+      if (backendError === 'No hay datos para el período especificado') {
         showToast('No hay datos para el período especificado', 'error');
-      } else if (backendMsg === 'No hay archivos CSV para consolidar' || backendMsg === 'No hay datos para consolidar en el período especificado.' || backendMsg === 'No se encontró el directorio de datos.' || backendMsg === 'No hay datos para exportar') {
+      } else if (
+        backendError === 'No hay archivos CSV para consolidar' ||
+        backendError === 'No hay datos para consolidar en el período especificado.' ||
+        backendError === 'No se encontró el directorio de datos.' ||
+        backendError === 'No hay datos para exportar'
+      ) {
         showToast('No hay datos para exportar', 'error');
       } else {
         showToast('Error al descargar el archivo', 'error');
