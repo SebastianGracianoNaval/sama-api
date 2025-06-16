@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Header from './components/Header';
 import ReportesLayout from './pages/ReportesLayout';
 import ReportesFabButton from './components/ReportesFabButton';
+import Toast from './components/Toast';
 
 const getDesignTokens = (mode) => ({
   palette: {
@@ -38,6 +39,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <Toast />
       <Header mode={mode} toggleMode={toggleMode} />
       <Routes>
         <Route path="/" element={<Home />} />
