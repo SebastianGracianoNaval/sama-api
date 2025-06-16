@@ -3,7 +3,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 export const showToast = (message, type = 'error') => {
   const options = {
-    position: "top-right",
+    position: "top-left",
     autoClose: 4000,
     hideProgressBar: false,
     closeOnClick: true,
@@ -26,7 +26,7 @@ export const showToast = (message, type = 'error') => {
 const Toast = () => {
   return (
     <ToastContainer
-      position="top-right"
+      position="top-left"
       autoClose={4000}
       hideProgressBar={false}
       newestOnTop
