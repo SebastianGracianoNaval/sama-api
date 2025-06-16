@@ -35,16 +35,8 @@ export const reportService = {
       params: { fechaInicio, fechaFin },
       responseType: 'blob'
     }),
-};
-
-export const fetchReportesList = async () => {
-  const res = await axios.get('/api/reportes');
-  return res.data;
-};
-
-export const downloadReporte = async (filename) => {
-  const res = await axios.get(`/api/reportes/${filename}`, { responseType: 'blob' });
-  return res.data;
+  getReportesList: () => api.get('/descargar/reportes'),
+  downloadReporte: (filename) => api.get(`/descargar/reportes/${filename}`, { responseType: 'blob' })
 };
 
 export default api; 

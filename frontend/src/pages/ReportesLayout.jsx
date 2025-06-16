@@ -3,7 +3,7 @@ import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DescriptionIcon from '@mui/icons-material/Description';
 import HistoryIcon from '@mui/icons-material/History';
-import { fetchReportesList, downloadReporte } from '../services/api';
+import { reportService } from '../services/api';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
 import { saveAs } from 'file-saver';
@@ -24,20 +24,24 @@ const ReportesLayout = () => {
 
   useEffect(() => {
     setLoading(true);
-    fetchReportesList()
+    reportService.getReportesList()
       .then(res => {
-        setReportes(res.files || []);
+        setReportes(res.data.files || []);
       })
-      .catch(() => setReportes([]))
+      .catch((error) => {
+        console.error('Error fetching reportes:', error);
+        setReportes([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const handleDownload = async (filename) => {
     setDownloading(filename);
     try {
-      const blob = await downloadReporte(filename);
-      saveAs(new Blob([blob]), filename);
-    } catch (e) {
+      const response = await reportService.downloadReporte(filename);
+      saveAs(new Blob([response.data]), filename);
+    } catch (error) {
+      console.error('Error downloading file:', error);
       alert('Error al descargar el archivo');
     } finally {
       setDownloading('');
