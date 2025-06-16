@@ -9,6 +9,7 @@ import NightlightRoundIcon from '@mui/icons-material/NightlightRound';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import { Link as RouterLink } from 'react-router-dom';
 import { Button } from '@mui/material';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 const MinimalSwitch = styled(Switch)(({ theme }) => ({
   width: 40,
@@ -42,29 +43,23 @@ const Header = ({ mode, toggleMode }) => (
     <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
       <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
         <Typography
-          variant="h6"
+          variant="h4"
           noWrap
           component={RouterLink}
           to="/"
           sx={{
             mr: 2,
-            fontFamily: 'Poppins, Inter, Roboto Slab, Arial',
-            fontWeight: 700,
+            fontFamily: 'Montserrat, Poppins, Roboto Slab, Arial',
+            fontWeight: 800,
             color: 'inherit',
             textDecoration: 'none',
             letterSpacing: 1.5,
+            fontSize: { xs: '1.7rem', sm: '2.1rem' },
+            lineHeight: 1.1,
           }}
         >
           Be Hooked
         </Typography>
-        <Button
-          component={RouterLink}
-          to="/reportes"
-          color="inherit"
-          sx={{ ml: 2, fontWeight: 500 }}
-        >
-          Reportes
-        </Button>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <NightlightRoundIcon fontSize="small" />}

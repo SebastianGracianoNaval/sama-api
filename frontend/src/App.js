@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
 import Header from './components/Header';
 import ReportesLayout from './pages/ReportesLayout';
+import ReportesFabButton from './components/ReportesFabButton';
 
 const getDesignTokens = (mode) => ({
   palette: {
@@ -37,12 +38,11 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Header mode={mode} toggleMode={toggleMode} />
-      <Router>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/reportes/*" element={<ReportesLayout />} />
-        </Routes>
-      </Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/reportes/*" element={<ReportesLayout />} />
+      </Routes>
+      <ReportesFabButton />
     </ThemeProvider>
   );
 }

@@ -58,12 +58,15 @@ const ReportesLayout = () => {
           [`& .MuiDrawer-paper`]: {
             width: drawerWidth,
             boxSizing: 'border-box',
-            bgcolor: theme.palette.mode === 'dark' ? '#23272F' : '#f5f7fa',
-            borderRight: 0,
+            bgcolor: theme.palette.mode === 'dark' ? '#23272F' : '#F3F4F6',
+            borderRight: theme.palette.mode === 'dark' ? 0 : '1px solid #e0e0e0',
+            top: '64px',
+            height: 'calc(100% - 64px)',
+            transition: 'background 0.2s',
           },
         }}
+        PaperProps={{ sx: { top: '64px', height: 'calc(100% - 64px)' } }}
       >
-        <Toolbar />
         <Box sx={{ overflow: 'auto', pt: 2 }}>
           <List>
             {reportTypes.map((item) => (
@@ -71,12 +74,35 @@ const ReportesLayout = () => {
                 <ListItemButton
                   selected={selected === item.label}
                   onClick={() => setSelected(item.label)}
-                  sx={{ borderRadius: 2, mx: 1, my: 0.5 }}
+                  sx={{
+                    borderRadius: 2,
+                    mx: 1,
+                    my: 0.5,
+                    bgcolor: selected === item.label ? (theme.palette.mode === 'dark' ? '#4FC3F7' : '#E0E3EA') : 'transparent',
+                    color: selected === item.label ? (theme.palette.mode === 'dark' ? '#fff' : '#222') : (theme.palette.mode === 'dark' ? 'text.secondary' : '#444'),
+                    fontFamily: 'Montserrat, Poppins, Roboto, Arial',
+                    fontWeight: selected === item.label ? 700 : 500,
+                    boxShadow: selected === item.label ? (theme.palette.mode === 'dark' ? '0 2px 8px 0 rgba(80,180,255,0.10)' : 'none') : 'none',
+                    transition: 'all 0.2s cubic-bezier(.4,0,.2,1)',
+                    '& .MuiListItemIcon-root': {
+                      color: selected === item.label ? (theme.palette.mode === 'dark' ? '#fff' : '#222') : (theme.palette.mode === 'dark' ? 'text.secondary' : '#888'),
+                    },
+                    '&:hover': {
+                      bgcolor: selected === item.label ? (theme.palette.mode === 'dark' ? '#29B6F6' : '#E0E3EA') : (theme.palette.mode === 'dark' ? '#23272F' : '#ECEFF4'),
+                    },
+                  }}
                 >
-                  <ListItemIcon sx={{ color: selected === item.label ? 'primary.main' : 'text.secondary' }}>
+                  <ListItemIcon>
                     {item.icon}
                   </ListItemIcon>
-                  <ListItemText primary={item.label} sx={{ color: selected === item.label ? 'primary.main' : 'text.secondary' }} />
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      fontFamily: 'Roboto, Arial',
+                      fontWeight: selected === item.label ? 700 : 400,
+                      fontSize: '1rem',
+                    }}
+                  />
                 </ListItemButton>
               </ListItem>
             ))}
@@ -94,7 +120,7 @@ const ReportesLayout = () => {
         <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <HistoryIcon color="primary" sx={{ mr: 1 }} />
-            <Typography variant="h5" fontWeight={700}>
+            <Typography variant="h5" fontWeight={700} sx={{ fontFamily: 'Roboto, Arial' }}>
               Historial de exportaciones
             </Typography>
           </Box>
