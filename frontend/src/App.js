@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Home from './pages/Home';
 import Header from './components/Header';
 import ReportesLayout from './pages/ReportesLayout';
@@ -29,10 +29,11 @@ const getDesignTokens = (mode) => ({
 function App() {
   const [mode, setMode] = useState('light');
   const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);
-
   const toggleMode = () => {
     setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
+  const location = useLocation();
+  const isReportesPage = location.pathname.startsWith('/reportes');
 
   return (
     <ThemeProvider theme={theme}>
@@ -42,7 +43,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/reportes/*" element={<ReportesLayout />} />
       </Routes>
-      <ReportesFabButton />
+      {!isReportesPage && <ReportesFabButton />}
     </ThemeProvider>
   );
 }

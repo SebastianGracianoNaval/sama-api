@@ -38,6 +38,11 @@ const ReportesLayout = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  const handleClearFilters = () => {
+    setFechaInicio('');
+    setFechaFin('');
+  };
+
   const handleDownload = async (filename) => {
     setDownloading(filename);
     try {
@@ -45,7 +50,7 @@ const ReportesLayout = () => {
       saveAs(new Blob([response.data]), filename);
     } catch (error) {
       console.error('Error downloading file:', error);
-      const backendMsg = error?.response?.data?.error || error?.response?.data?.message || 'Error al descargar el archivo';
+      const backendMsg = error?.response?.data?.message || error?.response?.data?.error || 'Error al descargar el archivo';
       showToast(backendMsg, 'error');
     } finally {
       setDownloading('');
@@ -61,10 +66,10 @@ const ReportesLayout = () => {
       } else if (selected === 'Plantillas') {
         response = await reportService.downloadReporteByType('plantillas', fechaInicio, fechaFin);
       }
-      saveAs(new Blob([response.data]), `${selected.toLowerCase()}_${fechaInicio}_${fechaFin}.xlsx`);
+      saveAs(new Blob([response.data]), `${selected.toLowerCase()}_${fechaInicio || 'all'}_${fechaFin || 'all'}.csv`);
     } catch (error) {
       console.error('Error downloading file:', error);
-      const backendMsg = error?.response?.data?.error || error?.response?.data?.message || 'Error al descargar el archivo';
+      const backendMsg = error?.response?.data?.message || error?.response?.data?.error || 'Error al descargar el archivo';
       showToast(backendMsg, 'error');
     } finally {
       setDownloading('');
@@ -182,11 +187,20 @@ const ReportesLayout = () => {
               inputProps={{ max: new Date().toISOString().slice(0, 10) }}
             />
             <Button
+              variant="outlined"
+              color="secondary"
+              onClick={handleClearFilters}
+              disabled={downloading || (!fechaInicio && !fechaFin)}
+              sx={{ minWidth: 100, fontWeight: 500, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
+            >
+              Limpiar
+            </Button>
+            <Button
               variant="contained"
               color="primary"
               onClick={handleDownloadByFilter}
               disabled={downloading}
-              sx={{ minWidth: 120, fontWeight: 700, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2 }}
+              sx={{ minWidth: 120, fontWeight: 700, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
             >
               Descargar
             </Button>

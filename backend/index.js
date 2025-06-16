@@ -11,6 +11,7 @@ const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson } = require('./utils/blipUtils');
 const { consolidarCsvs } = require('./utils/csvUtils');
+const reportController = require('./controllers/reportController');
 
 // Crear una aplicación Express
 const app = express();
@@ -259,30 +260,10 @@ if (!fs.existsSync(reportesDir)) {
   fs.mkdirSync(reportesDir, { recursive: true });
 }
 
-// Endpoint para listar archivos de reportes
-app.get('/api/reportes', (req, res) => {
-  try {
-    const files = fs.readdirSync(reportesDir)
-      .filter(f => f.endsWith('.csv'))
-      .map(f => ({
-        name: f,
-        fecha: fs.statSync(path.join(reportesDir, f)).mtime
-      }));
-    res.json({ success: true, files });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error al listar reportes', error: err.message });
-  }
-});
-
-// Endpoint para descargar un archivo de reporte
-app.get('/api/reportes/:filename', (req, res) => {
-  const file = req.params.filename;
-  const filePath = path.join(reportesDir, file);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
-  }
-  res.download(filePath);
-});
+// Rutas de reportes
+app.get('/api/reportes', reportController.getReportesList);
+app.get('/api/reportes/download/:filename', reportController.downloadReporte);
+app.get('/api/reportes/:tipo', reportController.downloadReporteByType);
 
 // Iniciar el servidor
 app.listen(PORT, () => {
