@@ -13,6 +13,7 @@ import MailIcon from '@mui/icons-material/Mail';
 import ContactsIcon from '@mui/icons-material/Contacts';
 import EventIcon from '@mui/icons-material/Event';
 import AllInboxIcon from '@mui/icons-material/AllInbox';
+import ClearIcon from '@mui/icons-material/Clear';
 
 const Reportes = () => {
   const [fechaInicio, setFechaInicio] = useState('');
@@ -105,10 +106,11 @@ const Reportes = () => {
           />
           <Button 
             variant="outlined" 
+            startIcon={<ClearIcon />}
             onClick={limpiarFechas}
-            sx={{ minWidth: '100px' }}
+            sx={{ minWidth: '100px', borderColor: theme => theme.palette.mode === 'dark' ? '#666' : '#bbb', color: theme => theme.palette.mode === 'dark' ? '#bbb' : '#666', '&:hover': { borderColor: theme => theme.palette.mode === 'dark' ? '#aaa' : '#888', background: theme => theme.palette.mode === 'dark' ? '#222' : '#eee' } }}
           >
-            Limpiar
+            LIMPIAR
           </Button>
         </Box>
         
