@@ -92,6 +92,7 @@ const Reportes = () => {
             onChange={(e) => setFechaInicio(e.target.value)}
             InputLabelProps={{ shrink: true }}
             fullWidth
+            inputProps={{ max: new Date().toISOString().slice(0, 10) }}
           />
           <TextField
             label="Fecha fin"
@@ -100,6 +101,7 @@ const Reportes = () => {
             onChange={(e) => setFechaFin(e.target.value)}
             InputLabelProps={{ shrink: true }}
             fullWidth
+            inputProps={{ max: new Date().toISOString().slice(0, 10) }}
           />
           <Button 
             variant="outlined" 

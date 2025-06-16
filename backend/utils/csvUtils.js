@@ -78,8 +78,8 @@ const fechaEnRango = (fechaStr, fechas) => {
     if (!fechaStr) return false;
     // Tomar solo la parte yyyy-mm-dd de cada fecha
     const fechaLimpia = fechaStr.trim().slice(0, 10);
-    const inicio = fechas.inicio.toISOString().slice(0, 10);
-    const fin = fechas.fin.toISOString().slice(0, 10);
+    const inicio = fechas.fechaInicio;
+    const fin = fechas.fechaFin;
     const entra = (fechaLimpia >= inicio && fechaLimpia <= fin);
     // Debug
     console.log(`[fechaEnRango] fechaFiltro: '${fechaLimpia}', inicio: '${inicio}', fin: '${fin}', entra: ${entra}`);
