@@ -1,6 +1,7 @@
 const { Parser } = require('json2csv');
 const fs = require('fs');
 const path = require('path');
+const { parse } = require('csv-parse/sync');
 
 /**
  * Convierte un objeto JSON a formato CSV
@@ -99,43 +100,45 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         const archivos = fs.readdirSync(directorio)
             .filter(archivo => archivo.endsWith('.csv'));
 
+        console.log('Archivos encontrados:', archivos);
+
         if (archivos.length === 0) {
             throw new Error('No hay archivos CSV para consolidar');
         }
 
-        // Leer y combinar todos los archivos
         let datosCombinados = [];
         let encabezados = null;
         let datosFiltrados = false;
 
         for (const archivo of archivos) {
+            console.log('Procesando archivo:', archivo);
             const rutaArchivo = path.join(directorio, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
-            const lineas = contenido.split('\n');
-            
-            // Obtener encabezados del primer archivo
+            // Parsear el CSV usando csv-parse
+            const records = parse(contenido, {
+                columns: true,
+                skip_empty_lines: true,
+                trim: true,
+                relax_column_count: true,
+                relax_quotes: true
+            });
+            // Guardar encabezados solo una vez
             if (!encabezados) {
-                encabezados = lineas[0];
+                encabezados = Object.keys(records[0] || {}).join(',');
                 datosCombinados.push(encabezados);
+                console.log('Encabezados:', encabezados);
             }
-            
-            // Limpiar comillas dobles de los encabezados
-            const columnas = encabezados.split(',').map(col => col.trim().replace(/^"|"$/g, ''));
-            const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
-            
-            // Procesar cada línea de datos
-            for (let i = 1; i < lineas.length; i++) {
-                const linea = lineas[i].trim();
-                if (!linea) continue;
-
-                if (fechas && fechas.inicio && fechas.fin && fechaIndex !== -1) {
-                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    if (valores[fechaIndex] && fechaEnRango(valores[fechaIndex], fechas)) {
+            for (const row of records) {
+                if (fechas && fechas.fechaInicio && fechas.fechaFin) {
+                    if (row.fechaFiltro && fechaEnRango(row.fechaFiltro, fechas)) {
                         datosFiltrados = true;
-                        datosCombinados.push(linea); // Solo agregar si pasa el filtro
+                        // Convertir el objeto a línea CSV respetando el orden de encabezados
+                        const linea = Object.values(encabezados.split(',').map(col => row[col] !== undefined ? row[col] : '')).join(',');
+                        datosCombinados.push(linea);
                     }
                 } else {
-                    datosCombinados.push(linea); // Si no hay filtro, agregar todo
+                    const linea = Object.values(encabezados.split(',').map(col => row[col] !== undefined ? row[col] : '')).join(',');
+                    datosCombinados.push(linea);
                 }
             }
         }
@@ -156,15 +159,11 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         // Crear archivo consolidado en la carpeta reportes
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
-        
-        // Asegurarse de que la carpeta reportes existe
         if (!fs.existsSync(carpetaReportes)) {
             fs.mkdirSync(carpetaReportes, { recursive: true });
         }
-
         const rutaConsolidada = path.join(carpetaReportes, `${tipo}-consolidado-${timestamp}.csv`);
         fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
-
         return rutaConsolidada;
     } catch (error) {
         throw error; // Propagar el error para manejarlo en el controlador
