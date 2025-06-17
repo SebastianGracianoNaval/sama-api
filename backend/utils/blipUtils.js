@@ -53,8 +53,10 @@ const obtenerRutaCarpeta = (tipo) => {
  * @returns {string} - El nombre del archivo
  */
 const generarNombreArchivo = (tipo) => {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return `${tipo}-${timestamp}.csv`;
+    const now = new Date();
+    const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+    const fecha = now.toISOString().slice(0,10);
+    return `${tipo}_${hora}_${fecha}.csv`;
 };
 
 /**

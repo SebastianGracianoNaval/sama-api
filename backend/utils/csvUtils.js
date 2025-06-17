@@ -157,12 +157,14 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         datosCombinados = [...new Set(datosCombinados)];
 
         // Crear archivo consolidado en la carpeta reportes
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
             fs.mkdirSync(carpetaReportes, { recursive: true });
         }
-        const rutaConsolidada = path.join(carpetaReportes, `${tipo}-consolidado-${timestamp}.csv`);
+        const rutaConsolidada = path.join(carpetaReportes, `${tipo}_${hora}_${fecha}.csv`);
         fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
         return rutaConsolidada;
     } catch (error) {
@@ -368,7 +370,9 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         }
 
         // Crear CSV
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
             fs.mkdirSync(carpetaReportes, { recursive: true });
@@ -383,7 +387,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             csvLines.push(line);
         }
 
-        const rutaConsolidada = path.join(carpetaReportes, `ticket-consolidado-${timestamp}.csv`);
+        const rutaConsolidada = path.join(carpetaReportes, `ticket_${hora}_${fecha}.csv`);
         fs.writeFileSync(rutaConsolidada, csvLines.join('\n'));
         console.log('[consolidarTicketsCsvs] Archivo consolidado generado en:', rutaConsolidada);
         return rutaConsolidada;
