@@ -237,8 +237,11 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             for (const campo of campos) {
                 if (campo.endsWith('@wa.gw.msging.net')) {
                     const numero = campo.split('@')[0];
-                    console.log(`[consolidarTicketsCsvs] Contacto encontrado: ${numero} en campo ${campo}`);
-                    return numero;
+                    // Verificar que sea un número de teléfono (solo dígitos)
+                    if (/^\d+$/.test(numero)) {
+                        console.log(`[consolidarTicketsCsvs] Contacto encontrado: ${numero} en campo ${campo}`);
+                        return numero;
+                    }
                 }
             }
             return null;
