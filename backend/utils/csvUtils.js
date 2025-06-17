@@ -2,6 +2,7 @@ const { Parser } = require('json2csv');
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
+const { generarNombreCsv } = require('./blipUtils');
 
 /**
  * Convierte un objeto JSON a formato CSV
