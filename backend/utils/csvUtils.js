@@ -262,6 +262,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             for (const row of records) {
                 totalProcesados++;
                 const seqId = row['content.sequentialId'];
+                const tipo = row['type'];
                 const contacto = extraerContacto(row);
 
                 if (!contacto) {
@@ -270,52 +271,56 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                     continue;
                 }
 
-                // Si es un nuevo ticket, crear una nueva entrada
-                if (!ticketsAbiertos.has(contacto)) {
-                    ticketsAbiertos.set(contacto, {
-                        ticket: row,
-                        mensajes: [],
-                        eventos: [],
-                        cerrado: false,
-                        fechaCierre: null
-                    });
-                    console.log(`[consolidarTicketsCsvs] Nuevo ticket abierto para contacto ${contacto}`);
+                // Solo crear ticket si es de tipo ticket
+                if (tipo === 'application/vnd.iris.ticket+json') {
+                    if (!ticketsAbiertos.has(contacto)) {
+                        ticketsAbiertos.set(contacto, {
+                            ticket: row,
+                            mensajes: [],
+                            eventos: [],
+                            cerrado: false,
+                            fechaCierre: null
+                        });
+                        console.log(`[consolidarTicketsCsvs] Nuevo ticket abierto para contacto ${contacto}`);
+                    }
                 }
 
+                // Si ya existe un ticket para este contacto, agregar mensajes
                 const ticketInfo = ticketsAbiertos.get(contacto);
+                if (ticketInfo && !ticketInfo.cerrado) {
+                    // Buscar eventos de cierre para este contacto
+                    const eventosCierre = eventos.filter(e => {
+                        const eContacto = extraerContacto(e);
+                        if (!eContacto) return false;
 
-                // Buscar eventos de cierre para este contacto
-                const eventosCierre = eventos.filter(e => {
-                    const eContacto = extraerContacto(e);
-                    if (!eContacto) return false;
+                        const prevName = (e['extras.#previousStateName'] || '').toLowerCase();
+                        const prevId = e['extras.#previousStateId'] || '';
+                        const action = (e['action'] || '').toLowerCase();
 
-                    const prevName = (e['extras.#previousStateName'] || '').toLowerCase();
-                    const prevId = e['extras.#previousStateId'] || '';
-                    const action = (e['action'] || '').toLowerCase();
+                        return eContacto === contacto && (
+                            prevName.includes('atendimento humano') ||
+                            prevName.includes('atencion humana') ||
+                            prevId.startsWith('desk') ||
+                            action.includes('encuesta')
+                        );
+                    });
 
-                    return eContacto === contacto && (
-                        prevName.includes('atendimento humano') ||
-                        prevName.includes('atencion humana') ||
-                        prevId.startsWith('desk') ||
-                        action.includes('encuesta')
-                    );
-                });
+                    // Si encontramos un evento de cierre, marcar el ticket como cerrado
+                    if (eventosCierre.length > 0 && !ticketInfo.cerrado) {
+                        ticketInfo.cerrado = true;
+                        ticketInfo.fechaCierre = eventosCierre[0]['storageDate'] || eventosCierre[0]['fechaFiltro'];
+                        console.log(`===================TICKET CERRADO [${seqId}] para contacto [${contacto}]================`);
+                    }
 
-                // Si encontramos un evento de cierre, marcar el ticket como cerrado
-                if (eventosCierre.length > 0 && !ticketInfo.cerrado) {
-                    ticketInfo.cerrado = true;
-                    ticketInfo.fechaCierre = eventosCierre[0]['storageDate'] || eventosCierre[0]['fechaFiltro'];
-                    console.log(`===================TICKET CERRADO [${seqId}] para contacto [${contacto}]================`);
+                    // Acumular mensajes relacionados con este ticket
+                    const mensajesTicket = mensajes.filter(m => {
+                        const contactoMsg = extraerContacto(m);
+                        return contactoMsg === contacto;
+                    });
+
+                    ticketInfo.mensajes = [...new Set([...ticketInfo.mensajes, ...mensajesTicket])];
+                    ticketInfo.eventos = [...new Set([...ticketInfo.eventos, ...eventosCierre])];
                 }
-
-                // Acumular mensajes relacionados con este ticket
-                const mensajesTicket = mensajes.filter(m => {
-                    const contactoMsg = extraerContacto(m);
-                    return contactoMsg === contacto;
-                });
-
-                ticketInfo.mensajes = [...new Set([...ticketInfo.mensajes, ...mensajesTicket])];
-                ticketInfo.eventos = [...new Set([...ticketInfo.eventos, ...eventosCierre])];
             }
         }
 
