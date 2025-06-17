@@ -252,9 +252,9 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                         contacto = (eventoCierre['identity'] || eventoCierre['contact.Identity']).split('@')[0];
                     }
                 }
-                if (!seqId || !contacto) {
+                if (!contacto) {
                     totalDescartados++;
-                    console.warn(`[consolidarTicketsCsvs] Ticket descartado por falta de sequentialId/contacto:`, row);
+                    console.warn(`[consolidarTicketsCsvs] Ticket descartado por falta de contacto:`, row);
                     continue;
                 }
 
