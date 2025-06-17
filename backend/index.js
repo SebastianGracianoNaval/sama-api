@@ -158,7 +158,13 @@ app.get('/descargar/todo', async (req, res) => {
 
         // Si solo hay un archivo, descargarlo directamente
         if (archivos.length === 1) {
-            return res.download(archivos[0].ruta, archivos[0].nombre);
+            // Formato: tipo_HH-MM-SS_YYYY-MM-DD.csv
+            const now = new Date();
+            const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+            const fecha = now.toISOString().slice(0,10);
+            const tipo = archivos[0].nombre.split('-')[0];
+            const nombreDescarga = `${tipo}_${hora}_${fecha}.csv`;
+            return res.download(archivos[0].ruta, nombreDescarga);
         }
 
         // Si hay múltiples archivos, crear un ZIP
@@ -167,8 +173,11 @@ app.get('/descargar/todo', async (req, res) => {
             zlib: { level: 9 }
         });
 
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const zipPath = path.join(__dirname, 'data', `todos_los_datos-${timestamp}.zip`);
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        const zipName = `todos_${hora}_${fecha}.zip`;
+        const zipPath = path.join(__dirname, 'data', zipName);
         const output = fs.createWriteStream(zipPath);
 
         archive.pipe(output);
@@ -179,7 +188,7 @@ app.get('/descargar/todo', async (req, res) => {
 
         await archive.finalize();
 
-        res.download(zipPath, `todos_los_datos-${timestamp}.zip`, (err) => {
+        res.download(zipPath, zipName, (err) => {
             if (err) {
                 console.error('Error al descargar el archivo ZIP:', err);
             }
@@ -250,7 +259,12 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
             });
         }
 
-        res.download(rutaCsv, path.basename(rutaCsv));
+        // Formato: tipo_HH-MM-SS_YYYY-MM-DD.csv
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        const nombreDescarga = `${tipo}_${hora}_${fecha}.csv`;
+        res.download(rutaCsv, nombreDescarga);
     } catch (error) {
         console.error('Error al descargar el archivo:', error);
         res.status(500).json({
