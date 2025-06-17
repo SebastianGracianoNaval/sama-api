@@ -9,7 +9,7 @@ const fs = require('fs');
 const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
-const { obtenerRutaCarpeta, identificarTipoJson } = require('./utils/blipUtils');
+const { obtenerRutaCarpeta, identificarTipoJson, generarNombreCsv } = require('./utils/blipUtils');
 const { consolidarCsvs, consolidarTicketsCsvs } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
 
@@ -173,11 +173,8 @@ app.get('/descargar/todo', async (req, res) => {
 
         // Si solo hay un archivo, descargarlo directamente
         if (archivos.length === 1) {
-            const now = new Date();
-            const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-            const fecha = now.toISOString().slice(0,10);
             const tipo = archivos[0].nombre.split('-')[0];
-            const nombreDescarga = `${tipo}_${hora}_${fecha}.csv`;
+            const nombreDescarga = generarNombreCsv(tipo);
             return res.download(archivos[0].ruta, nombreDescarga);
         }
 
@@ -187,10 +184,7 @@ app.get('/descargar/todo', async (req, res) => {
             zlib: { level: 9 }
         });
 
-        const now = new Date();
-        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-        const fecha = now.toISOString().slice(0,10);
-        const zipName = `todos_${hora}_${fecha}.zip`;
+        const zipName = generarNombreCsv('todos').replace('.csv', '.zip');
         const zipPath = path.join(__dirname, 'data', zipName);
         const output = fs.createWriteStream(zipPath);
 
@@ -275,11 +269,7 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
             });
         }
 
-        // Formato: tipo_HH-MM-SS_YYYY-MM-DD.csv
-        const now = new Date();
-        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-        const fecha = now.toISOString().slice(0,10);
-        const nombreDescarga = `${tipo}_${hora}_${fecha}.csv`;
+        const nombreDescarga = generarNombreCsv(tipo);
         
         // Establecer el header Content-Disposition
         res.setHeader('Content-Disposition', `attachment; filename="${nombreDescarga}"`);

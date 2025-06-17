@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { convertJsonToCsv } = require('../utils/csvUtils');
+const { generarNombreCsv } = require('../utils/blipUtils');
 
 const reportController = {
     // Obtener lista de reportes disponibles
@@ -137,15 +138,19 @@ const reportController = {
                     message: 'No hay datos para exportar.'
                 });
             }
+            // Generar nombre de archivo con el formato correcto
+            const nombreArchivo = generarNombreCsv(tipo);
+
             // Guardar reporte consolidado
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const carpetaReportes = path.join(__dirname, '..', 'data', 'reportes');
             if (!fs.existsSync(carpetaReportes)) {
                 fs.mkdirSync(carpetaReportes, { recursive: true });
             }
-            const nombreArchivo = `${tipo}_${fechaInicio || 'all'}_${fechaFin || 'all'}_${timestamp}.csv`;
             const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
             fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
+
+            // Establecer el header Content-Disposition
+            res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
             res.download(rutaConsolidada);
         } catch (error) {
             console.error('[ReportController] Error al generar reporte:', error);
