@@ -167,7 +167,8 @@ app.get('/descargar/todo', async (req, res) => {
             zlib: { level: 9 }
         });
 
-        const zipPath = path.join(__dirname, 'data', 'todos_los_datos.zip');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const zipPath = path.join(__dirname, 'data', `todos_los_datos-${timestamp}.zip`);
         const output = fs.createWriteStream(zipPath);
 
         archive.pipe(output);
@@ -178,7 +179,7 @@ app.get('/descargar/todo', async (req, res) => {
 
         await archive.finalize();
 
-        res.download(zipPath, 'todos_los_datos.zip', (err) => {
+        res.download(zipPath, `todos_los_datos-${timestamp}.zip`, (err) => {
             if (err) {
                 console.error('Error al descargar el archivo ZIP:', err);
             }
