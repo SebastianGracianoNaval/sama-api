@@ -12,7 +12,11 @@ const api = axios.create({
 async function handleBlobResponse(promise) {
   try {
     const response = await promise;
+    console.log('[handleBlobResponse] Headers recibidos:', response.headers);
     const contentType = response.headers['content-type'];
+    const contentDisposition = response.headers['content-disposition'];
+    console.log('[handleBlobResponse] Content-Disposition:', contentDisposition);
+    
     if (contentType && (contentType.includes('application/json') || contentType.includes('text/html'))) {
       const text = await response.data.text();
       let errorMsg = 'Error al descargar el archivo';

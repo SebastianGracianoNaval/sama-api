@@ -238,8 +238,10 @@ function validarFechas(fechaInicio, fechaFin) {
 // Función para descargar CSV consolidado
 async function descargarCsvConsolidado(tipo, res, fechas = null) {
     try {
+        console.log('[descargarCsvConsolidado] Iniciando descarga para tipo:', tipo);
         const carpeta = obtenerRutaCarpeta(tipo);
         if (!carpeta) {
+            console.error('[descargarCsvConsolidado] No se pudo determinar la carpeta para tipo:', tipo);
             return res.status(500).json({
                 success: false,
                 message: 'Error al determinar la carpeta de destino'
@@ -247,8 +249,11 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
         }
 
         const pathCarpeta = path.join(__dirname, carpeta);
+        console.log('[descargarCsvConsolidado] Ruta de carpeta:', pathCarpeta);
+        
         // Si la carpeta no existe, la creamos
         if (!fs.existsSync(pathCarpeta)) {
+            console.log('[descargarCsvConsolidado] Creando carpeta:', pathCarpeta);
             fs.mkdirSync(pathCarpeta, { recursive: true });
             return res.status(404).json({
                 success: false,
@@ -258,24 +263,32 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
 
         let rutaCsv;
         if (tipo === 'ticket') {
+            console.log('[descargarCsvConsolidado] Consolidando tickets...');
             rutaCsv = await consolidarTicketsCsvs(pathCarpeta, fechas);
         } else {
+            console.log('[descargarCsvConsolidado] Consolidando CSV normal...');
             rutaCsv = await consolidarCsvs(pathCarpeta, tipo, fechas);
         }
+        
         if (!rutaCsv) {
+            console.log('[descargarCsvConsolidado] No se encontró ruta CSV');
             return res.status(404).json({
                 success: false,
                 message: 'No hay datos disponibles para descargar en el período especificado.'
             });
         }
+        console.log('[descargarCsvConsolidado] Ruta CSV encontrada:', rutaCsv);
 
         const nombreDescarga = generarNombreCsv(tipo);
+        console.log('[descargarCsvConsolidado] Nombre de descarga generado:', nombreDescarga);
         
         // Establecer el header Content-Disposition
         res.setHeader('Content-Disposition', `attachment; filename="${nombreDescarga}"`);
+        console.log('[descargarCsvConsolidado] Header Content-Disposition establecido:', `attachment; filename="${nombreDescarga}"`);
+        
         res.download(rutaCsv, nombreDescarga);
     } catch (error) {
-        console.error('Error al descargar el archivo:', error);
+        console.error('[descargarCsvConsolidado] Error:', error);
         res.status(500).json({
             success: false,
             message: 'Error al descargar el archivo',
