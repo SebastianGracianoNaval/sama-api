@@ -10,7 +10,7 @@ const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson } = require('./utils/blipUtils');
-const { consolidarCsvs } = require('./utils/csvUtils');
+const { consolidarCsvs, consolidarTicketsCsvs } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
 
 // Crear una aplicación Express
@@ -236,7 +236,12 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
             });
         }
 
-        const rutaCsv = await consolidarCsvs(pathCarpeta, tipo, fechas);
+        let rutaCsv;
+        if (tipo === 'ticket') {
+            rutaCsv = await consolidarTicketsCsvs(pathCarpeta, fechas);
+        } else {
+            rutaCsv = await consolidarCsvs(pathCarpeta, tipo, fechas);
+        }
         if (!rutaCsv) {
             return res.status(404).json({
                 success: false,
