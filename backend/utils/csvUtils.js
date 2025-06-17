@@ -225,6 +225,25 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         const ticketsAbiertos = new Map();
         let totalProcesados = 0, totalCerrados = 0, totalDescartados = 0;
 
+        // Función para extraer el número de teléfono del contacto
+        const extraerContacto = (row) => {
+            // Buscar en from, to e identity
+            const campos = [
+                row['from'],
+                row['to'],
+                row['identity']
+            ].filter(Boolean);
+
+            for (const campo of campos) {
+                if (campo.endsWith('@wa.gw.msging.net')) {
+                    const numero = campo.split('@')[0];
+                    console.log(`[consolidarTicketsCsvs] Contacto encontrado: ${numero} en campo ${campo}`);
+                    return numero;
+                }
+            }
+            return null;
+        };
+
         // Procesar tickets
         for (const archivo of archivos) {
             const rutaArchivo = path.join(directorio, archivo);
@@ -240,7 +259,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             for (const row of records) {
                 totalProcesados++;
                 const seqId = row['content.sequentialId'];
-                const contacto = (row['content.customerIdentity'] || row['from'] || row['to'] || '').split('@')[0];
+                const contacto = extraerContacto(row);
 
                 if (!contacto) {
                     totalDescartados++;
@@ -264,13 +283,18 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
 
                 // Buscar eventos de cierre para este contacto
                 const eventosCierre = eventos.filter(e => {
-                    const eContacto = (e['identity'] || e['contact.Identity'] || '').split('@')[0];
+                    const eContacto = extraerContacto(e);
+                    if (!eContacto) return false;
+
                     const prevName = (e['extras.#previousStateName'] || '').toLowerCase();
                     const prevId = e['extras.#previousStateId'] || '';
+                    const action = (e['action'] || '').toLowerCase();
+
                     return eContacto === contacto && (
                         prevName.includes('atendimento humano') ||
                         prevName.includes('atencion humana') ||
-                        prevId.startsWith('desk')
+                        prevId.startsWith('desk') ||
+                        action.includes('encuesta')
                     );
                 });
 
@@ -283,11 +307,8 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
 
                 // Acumular mensajes relacionados con este ticket
                 const mensajesTicket = mensajes.filter(m => {
-                    const contactoMsg = (m['to']?.split('@')[0] === contacto || m['from']?.split('@')[0] === contacto);
-                    let fechaMsg = m['metadata.#envelope.storageDate'] || m['storageDate'] || m['fechaFiltro'];
-                    if (!fechaMsg) return false;
-                    fechaMsg = fechaMsg.length > 10 ? fechaMsg : fechaMsg + 'T00:00:00Z';
-                    return contactoMsg;
+                    const contactoMsg = extraerContacto(m);
+                    return contactoMsg === contacto;
                 });
 
                 ticketInfo.mensajes = [...new Set([...ticketInfo.mensajes, ...mensajesTicket])];
