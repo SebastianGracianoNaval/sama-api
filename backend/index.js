@@ -134,11 +134,20 @@ app.get('/descargar/todo', async (req, res) => {
     try {
         const tipos = ['mensaje', 'contacto', 'evento', 'desconocido'];
         const archivos = [];
+        const errores = [];
 
         for (const tipo of tipos) {
-            const carpeta = obtenerRutaCarpeta(tipo);
-            if (carpeta) {
+            try {
+                const carpeta = obtenerRutaCarpeta(tipo);
+                if (!carpeta) continue;
+
                 const ruta = path.join(__dirname, carpeta);
+                // Si la carpeta no existe, la creamos
+                if (!fs.existsSync(ruta)) {
+                    fs.mkdirSync(ruta, { recursive: true });
+                    continue; // Saltamos este tipo ya que no hay datos
+                }
+
                 const rutaCsv = await consolidarCsvs(ruta, tipo, fechasValidas);
                 if (rutaCsv) {
                     archivos.push({
@@ -146,19 +155,24 @@ app.get('/descargar/todo', async (req, res) => {
                         nombre: path.basename(rutaCsv)
                     });
                 }
+            } catch (error) {
+                console.error(`Error procesando ${tipo}:`, error);
+                errores.push(`Error en ${tipo}: ${error.message}`);
+                continue; // Continuamos con el siguiente tipo
             }
         }
 
+        // Si no hay archivos para descargar
         if (archivos.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: 'No hay datos para consolidar en el período especificado.'
+                message: 'No hay datos disponibles para descargar en el período especificado.',
+                errores: errores.length > 0 ? errores : undefined
             });
         }
 
         // Si solo hay un archivo, descargarlo directamente
         if (archivos.length === 1) {
-            // Formato: tipo_HH-MM-SS_YYYY-MM-DD.csv
             const now = new Date();
             const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
             const fecha = now.toISOString().slice(0,10);
@@ -239,10 +253,12 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
         }
 
         const pathCarpeta = path.join(__dirname, carpeta);
+        // Si la carpeta no existe, la creamos
         if (!fs.existsSync(pathCarpeta)) {
+            fs.mkdirSync(pathCarpeta, { recursive: true });
             return res.status(404).json({
                 success: false,
-                message: 'No se encontró el directorio de datos.'
+                message: 'No hay datos disponibles para descargar.'
             });
         }
 
@@ -255,7 +271,7 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
         if (!rutaCsv) {
             return res.status(404).json({
                 success: false,
-                message: 'No hay datos para consolidar en el período especificado.'
+                message: 'No hay datos disponibles para descargar en el período especificado.'
             });
         }
 
