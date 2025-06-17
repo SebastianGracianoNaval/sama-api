@@ -70,6 +70,7 @@ const detectarCierreTicket = (ticket) => {
         if (prevState.includes('atendimento humano') || prevState.includes('atencion humana')) {
             cerrado = true;
             fechaCierre = ticket.storageDate || ticket['metadata.#envelope.storageDate'] || ticket.fechaFiltro;
+            console.log('============================================================TICKET CERRADO===============');
         }
     }
     return { cerrado, fechaCierre };
