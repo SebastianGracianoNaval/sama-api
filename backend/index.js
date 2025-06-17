@@ -280,6 +280,9 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
         const nombreDescarga = `${tipo}_${hora}_${fecha}.csv`;
+        
+        // Establecer el header Content-Disposition
+        res.setHeader('Content-Disposition', `attachment; filename="${nombreDescarga}"`);
         res.download(rutaCsv, nombreDescarga);
     } catch (error) {
         console.error('Error al descargar el archivo:', error);

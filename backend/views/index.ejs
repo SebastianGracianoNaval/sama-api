@@ -204,7 +204,7 @@ function descargarConAlerta(link, event) {
             }
             // Obtener el nombre del archivo del header
             const disposition = response.headers.get('Content-Disposition');
-            let filename = 'reporte.csv';
+            let filename = '';
             if (disposition && disposition.indexOf('filename=') !== -1) {
                 filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
             }
