@@ -63,55 +63,16 @@ const generarNombreArchivo = (tipo) => {
  * @returns {Object} - Objeto con { cerrado: boolean, fechaCierre: string | null }
  */
 const detectarCierreTicket = (ticket) => {
-    // Verificar si ya tiene campos de cierre
-    if (ticket.cerrado === true || ticket.cerrado === 'true') {
-        return {
-            cerrado: true,
-            fechaCierre: ticket.fechaCierre || ticket['content.storageDate'] || ticket.fechaFiltro
-        };
+    let cerrado = false;
+    let fechaCierre = null;
+    if (ticket.extras && ticket.extras['#previousStateName']) {
+        const prevState = ticket.extras['#previousStateName'].toLowerCase();
+        if (prevState.includes('atendimento humano') || prevState.includes('atencion humana')) {
+            cerrado = true;
+            fechaCierre = ticket.storageDate || ticket['metadata.#envelope.storageDate'] || ticket.fechaFiltro;
+        }
     }
-
-    // Verificar patrones de cierre en el ticket
-    const status = ticket['content.status'] || ticket.status;
-    const previousStateName = ticket['content.previousStateName'] || ticket.previousStateName;
-    const state = ticket['content.state'] || ticket.state;
-    const content = ticket['content.customerInput.value'] || ticket.content;
-
-    // Patrones de cierre
-    const patronesCierre = [
-        status === 'CLOSED',
-        status === 'FINALIZADO',
-        previousStateName?.includes('Atencion Humana'),
-        state === 'Cerrado',
-        state === 'Finalizado',
-        content?.includes('finalizo el ticket'),
-        ticket['extras.#stateName'] === '4.0 - Encuesta',
-        ticket['metadata.#stateName'] === '4.0 - Encuesta'
-    ];
-
-    if (patronesCierre.some(patron => patron)) {
-        return {
-            cerrado: true,
-            fechaCierre: ticket['content.storageDate'] || ticket.storageDate || ticket.fechaFiltro
-        };
-    }
-
-    // Verificar timeout de 23h58m
-    const fechaCreacion = new Date(ticket['content.storageDate'] || ticket.storageDate || ticket.fechaFiltro);
-    const ahora = new Date();
-    const diffHoras = (ahora - fechaCreacion) / (1000 * 60 * 60);
-    
-    if (diffHoras >= 23.966) { // 23 horas y 58 minutos
-        return {
-            cerrado: true,
-            fechaCierre: ahora.toISOString()
-        };
-    }
-
-    return {
-        cerrado: false,
-        fechaCierre: null
-    };
+    return { cerrado, fechaCierre };
 };
 
 module.exports = {
