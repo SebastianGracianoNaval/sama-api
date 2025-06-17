@@ -65,20 +65,31 @@ const generarNombreArchivo = (tipo) => {
 const detectarCierreTicket = (ticket) => {
     let cerrado = false;
     let fechaCierre = null;
-    if (ticket.extras && ticket.extras['#previousStateName']) {
-        const prevState = ticket.extras['#previousStateName'].toLowerCase();
-        if (prevState.includes('atendimento humano') || prevState.includes('atencion humana')) {
+    if (ticket.extras) {
+        const prevState = ticket.extras['#previousStateName']?.toLowerCase() || '';
+        const prevStateId = ticket.extras['#previousStateId'] || '';
+        if (prevState.includes('atendimento humano') || prevState.includes('atencion humana') || prevStateId.startsWith('desk')) {
             cerrado = true;
             fechaCierre = ticket.storageDate || ticket['metadata.#envelope.storageDate'] || ticket.fechaFiltro;
-            console.log('============================================================TICKET CERRADO===============');
+            console.log('===================TICKET CERRADO===============');
         }
     }
     return { cerrado, fechaCierre };
+};
+
+// Agregar validación para no exportar tickets abiertos
+const validarTicketCerrado = (ticket) => {
+    const { cerrado } = detectarCierreTicket(ticket);
+    if (!cerrado) {
+        throw new Error('No se puede exportar un ticket que no está cerrado.');
+    }
+    return true;
 };
 
 module.exports = {
     identificarTipoJson,
     obtenerRutaCarpeta,
     generarNombreArchivo,
-    detectarCierreTicket
+    detectarCierreTicket,
+    validarTicketCerrado
 }; 
