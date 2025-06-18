@@ -174,19 +174,45 @@ app.get('/descargar/todo', async (req, res) => {
         const zipName = `todos_${hora}_${fecha}.zip`;
         const zipPath = path.join(__dirname, 'data', zipName);
         const output = fs.createWriteStream(zipPath);
+        
+        // Configurar el pipe del archivo
         archive.pipe(output);
+        
+        // Agregar archivos al ZIP
         for (const archivo of archivos) {
             archive.file(archivo.ruta, { name: archivo.nombre });
         }
-        await archive.finalize();
-        res.download(zipPath, zipName, (err) => {
-            if (err) {
-                console.error('Error al descargar el archivo ZIP:', err);
+        
+        // Manejar errores del archiver
+        archive.on('error', (err) => {
+            console.error('Error al crear el archivo ZIP:', err);
+            // Limpiar el archivo parcial si existe
+            if (fs.existsSync(zipPath)) {
+                fs.unlinkSync(zipPath);
             }
-            fs.unlink(zipPath, (err) => {
-                if (err) console.error('Error al eliminar el archivo ZIP:', err);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al crear el archivo ZIP',
+                error: err.message
             });
         });
+        
+        // Esperar a que el archivo esté completamente escrito antes de descargarlo
+        output.on('close', () => {
+            console.log(`[ZIP] Archivo creado exitosamente: ${zipPath}`);
+            res.download(zipPath, zipName, (err) => {
+                if (err) {
+                    console.error('Error al descargar el archivo ZIP:', err);
+                }
+                // Limpiar el archivo ZIP después de la descarga
+                fs.unlink(zipPath, (err) => {
+                    if (err) console.error('Error al eliminar el archivo ZIP:', err);
+                });
+            });
+        });
+        
+        // Finalizar el archivo
+        archive.finalize();
     } catch (error) {
         res.status(500).json({
             success: false,
