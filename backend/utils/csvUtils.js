@@ -129,8 +129,8 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
     if (datosCombinados.length <= 1) {
         return null;
     }
-    // Usar un nombre simple para el archivo consolidado
-    const nombreArchivo = `${tipo}-consolidado.csv`;
+    // Usar un nombre fijo para el archivo consolidado
+    const nombreArchivo = `consolidado.csv`;
     const rutaConsolidada = path.join(directorio, nombreArchivo);
     fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
     return rutaConsolidada;
@@ -351,7 +351,8 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             csvLines.push(line);
         }
 
-        const rutaConsolidada = path.join(carpetaReportes, `ticket_${hora}_${fecha}.csv`);
+        // Al final, usar un nombre fijo para el archivo de tickets
+        const rutaConsolidada = path.join(carpetaReportes, `tickets.csv`);
         fs.writeFileSync(rutaConsolidada, csvLines.join('\n'));
         console.log('[consolidarTicketsCsvs] Archivo consolidado generado en:', rutaConsolidada);
         return rutaConsolidada;

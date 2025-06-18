@@ -120,7 +120,6 @@ app.get('/descargar/eventos', async (req, res) => {
 app.get('/descargar/todo', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query;
     let fechasValidas = null;
-    
     if (fechaInicio && fechaFin) {
         fechasValidas = validarFechas(fechaInicio, fechaFin);
         if (!fechasValidas) {
@@ -130,24 +129,19 @@ app.get('/descargar/todo', async (req, res) => {
             });
         }
     }
-
     try {
         const tipos = ['mensaje', 'contacto', 'evento', 'desconocido'];
         const archivos = [];
         const errores = [];
-
         for (const tipo of tipos) {
             try {
                 const carpeta = obtenerRutaCarpeta(tipo);
                 if (!carpeta) continue;
-
                 const ruta = path.join(__dirname, carpeta);
-                // Si la carpeta no existe, la creamos
                 if (!fs.existsSync(ruta)) {
                     fs.mkdirSync(ruta, { recursive: true });
-                    continue; // Saltamos este tipo ya que no hay datos
+                    continue;
                 }
-
                 const rutaCsv = await consolidarCsvs(ruta, tipo, fechasValidas);
                 if (rutaCsv) {
                     archivos.push({
@@ -156,13 +150,10 @@ app.get('/descargar/todo', async (req, res) => {
                     });
                 }
             } catch (error) {
-                console.error(`Error procesando ${tipo}:`, error);
                 errores.push(`Error en ${tipo}: ${error.message}`);
-                continue; // Continuamos con el siguiente tipo
+                continue;
             }
         }
-
-        // Si no hay archivos para descargar
         if (archivos.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -170,43 +161,33 @@ app.get('/descargar/todo', async (req, res) => {
                 errores: errores.length > 0 ? errores : undefined
             });
         }
-
-        // Si solo hay un archivo, descargarlo directamente
         if (archivos.length === 1) {
-            const tipo = archivos[0].nombre.split('-')[0];
-            const nombreDescarga = generarNombreCsv(tipo);
+            const nombreDescarga = archivos[0].nombre;
             return res.download(archivos[0].ruta, nombreDescarga);
         }
-
         // Si hay múltiples archivos, crear un ZIP
         const archiver = require('archiver');
-        const archive = archiver('zip', {
-            zlib: { level: 9 }
-        });
-
-        const zipName = generarNombreCsv('todos').replace('.csv', '.zip');
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        const zipName = `todos_${hora}_${fecha}.zip`;
         const zipPath = path.join(__dirname, 'data', zipName);
         const output = fs.createWriteStream(zipPath);
-
         archive.pipe(output);
-
         for (const archivo of archivos) {
             archive.file(archivo.ruta, { name: archivo.nombre });
         }
-
         await archive.finalize();
-
         res.download(zipPath, zipName, (err) => {
             if (err) {
                 console.error('Error al descargar el archivo ZIP:', err);
             }
-            // Limpiar el archivo ZIP después de la descarga
             fs.unlink(zipPath, (err) => {
                 if (err) console.error('Error al eliminar el archivo ZIP:', err);
             });
         });
     } catch (error) {
-        console.error('Error al procesar la descarga:', error);
         res.status(500).json({
             success: false,
             message: 'Error al procesar la descarga',
@@ -265,10 +246,8 @@ async function descargarCsvConsolidado(tipo, res, fechas = null) {
                 message: 'No hay datos disponibles para descargar en el período especificado.'
             });
         }
-        // Usar el nombre del archivo generado por consolidarCsvs
-        const nombreDescarga = path.basename(rutaCsv);
-        res.setHeader('Content-Disposition', `attachment; filename="${nombreDescarga}"`);
-        res.download(rutaCsv, nombreDescarga);
+        // Descargar el archivo tal cual, el frontend decide el nombre
+        res.download(rutaCsv);
     } catch (error) {
         res.status(500).json({
             success: false,
