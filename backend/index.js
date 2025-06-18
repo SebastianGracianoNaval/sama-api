@@ -161,11 +161,8 @@ app.get('/descargar/todo', async (req, res) => {
                 errores: errores.length > 0 ? errores : undefined
             });
         }
-        if (archivos.length === 1) {
-            const nombreDescarga = archivos[0].nombre;
-            return res.download(archivos[0].ruta, nombreDescarga);
-        }
-        // Si hay múltiples archivos, crear un ZIP
+        
+        // Siempre crear un ZIP, sin importar si hay uno o varios archivos
         const archiver = require('archiver');
         const archive = archiver('zip', { zlib: { level: 9 } });
         const now = new Date();
