@@ -80,12 +80,21 @@ const ReportesLayout = () => {
     setDownloading('filtro');
     try {
       let response;
+      let filename = '';
       if (selected === 'Tickets') {
         response = await reportService.downloadReporteByType('tickets', fechaInicio, fechaFin);
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        filename = `tickets_${hora}_${fecha}.csv`;
       } else if (selected === 'Plantillas') {
         response = await reportService.downloadReporteByType('plantillas', fechaInicio, fechaFin);
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        filename = `plantillas_${hora}_${fecha}.csv`;
       }
-      saveAs(new Blob([response.data]), `${selected.toLowerCase()}_${fechaInicio || 'all'}_${fechaFin || 'all'}.csv`);
+      saveAs(new Blob([response.data]), filename);
     } catch (error) {
       console.error('Error downloading file:', error);
       showToast(error.message || 'Error al descargar el archivo', 'error');

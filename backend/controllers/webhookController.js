@@ -20,7 +20,30 @@ const handleWebhook = async (req, res) => {
             });
         }
 
-        // Buscar la fecha más relevante y formatearla a yyyy-mm-dd
+        // --- LÓGICA DE TICKETS (auditoría) ---
+        if (esWebhookAperturaTicket(jsonData)) {
+            const contacto = extraerContacto(jsonData);
+            if (contacto) {
+                if (!ticketsAbiertos[contacto] || ticketsAbiertos[contacto].cerrado) {
+                    ticketsAbiertos[contacto] = { webhooks: [], cerrado: false };
+                    console.log(`[Ticket] Caja ABIERTA para contacto ${contacto}`);
+                }
+                ticketsAbiertos[contacto].webhooks.push(addFechaFiltro(jsonData));
+                console.log(`[Ticket] Webhook almacenado para contacto ${contacto}`);
+            }
+        } else {
+            const contacto = extraerContacto(jsonData);
+            if (contacto && ticketsAbiertos[contacto] && !ticketsAbiertos[contacto].cerrado) {
+                ticketsAbiertos[contacto].webhooks.push(addFechaFiltro(jsonData));
+                console.log(`[Ticket] Webhook almacenado para contacto ${contacto}`);
+                if (esWebhookCierreTicket(jsonData)) {
+                    ticketsAbiertos[contacto].cerrado = true;
+                    console.log(`[Ticket] Caja CERRADA para contacto ${contacto}`);
+                }
+            }
+        }
+
+        // --- LÓGICA DE PROCESAMIENTO GENERAL Y CSV ---
         function obtenerFechaFiltro(obj) {
             let fecha = null;
             if (obj.metadata && obj.metadata['#envelope.storageDate']) {
