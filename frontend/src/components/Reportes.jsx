@@ -66,11 +66,18 @@ const Reportes = () => {
         case 'todo':
           response = await reportService.downloadAll(fechaInicio, fechaFin);
           break;
+        case 'tickets':
+          response = await reportService.downloadTickets(fechaInicio, fechaFin);
+          break;
         default:
           return;
       }
 
-      downloadBlobResponse(response, `reporte-${tipo}.csv`);
+      const now = new Date();
+      const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+      const fecha = now.toISOString().slice(0,10);
+      const fallbackName = `${tipo}_${hora}_${fecha}.csv`;
+      downloadBlobResponse(response, fallbackName);
       showToast('Archivo descargado correctamente', 'success');
     } catch (error) {
       showToast(error.message || 'Error al descargar el archivo', 'error');
