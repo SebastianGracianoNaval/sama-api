@@ -130,7 +130,7 @@ app.get('/descargar/todo', async (req, res) => {
         }
     }
     try {
-        const tipos = ['mensaje', 'contacto', 'evento', 'desconocido'];
+        const tipos = ['mensaje', 'contacto', 'evento', 'ticket', 'desconocido'];
         const archivos = [];
         const errores = [];
         for (const tipo of tipos) {
@@ -142,7 +142,12 @@ app.get('/descargar/todo', async (req, res) => {
                     fs.mkdirSync(ruta, { recursive: true });
                     continue;
                 }
-                const rutaCsv = await consolidarCsvs(ruta, tipo, fechasValidas);
+                let rutaCsv;
+                if (tipo === 'ticket') {
+                    rutaCsv = await consolidarTicketsCsvs(ruta, fechasValidas);
+                } else {
+                    rutaCsv = await consolidarCsvs(ruta, tipo, fechasValidas);
+                }
                 if (rutaCsv) {
                     archivos.push({
                         ruta: rutaCsv,
@@ -162,6 +167,8 @@ app.get('/descargar/todo', async (req, res) => {
             });
         }
         
+        console.log(`[TODO] Archivos a incluir en ZIP:`, archivos.map(a => ({ ruta: a.ruta, nombre: a.nombre })));
+        
         // Siempre crear un ZIP, sin importar si hay uno o varios archivos
         const archiver = require('archiver');
         const archive = archiver('zip', { zlib: { level: 9 } });
@@ -172,11 +179,15 @@ app.get('/descargar/todo', async (req, res) => {
         const zipPath = path.join(__dirname, 'data', zipName);
         const output = fs.createWriteStream(zipPath);
         
+        console.log(`[TODO] Creando ZIP: ${zipPath}`);
+        
         // Configurar el pipe del archivo
         archive.pipe(output);
         
-        // Agregar archivos al ZIP
+        // Agregar archivos al ZIP con nombres únicos
         for (const archivo of archivos) {
+            console.log(`[TODO] Agregando al ZIP: ${archivo.nombre} desde ${archivo.ruta}`);
+            // Usar el nombre original del archivo (que ya incluye el tipo)
             archive.file(archivo.ruta, { name: archivo.nombre });
         }
         
@@ -197,6 +208,9 @@ app.get('/descargar/todo', async (req, res) => {
         // Esperar a que el archivo esté completamente escrito antes de descargarlo
         output.on('close', () => {
             console.log(`[ZIP] Archivo creado exitosamente: ${zipPath}`);
+            // Establecer el header Content-Disposition para el ZIP
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
             res.download(zipPath, zipName, (err) => {
                 if (err) {
                     console.error('Error al descargar el archivo ZIP:', err);

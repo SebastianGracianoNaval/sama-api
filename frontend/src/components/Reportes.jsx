@@ -76,7 +76,7 @@ const Reportes = () => {
       const now = new Date();
       const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
       const fecha = now.toISOString().slice(0,10);
-      const fallbackName = `${tipo}_${hora}_${fecha}.csv`;
+      const fallbackName = tipo === 'todo' ? `todos_${hora}_${fecha}.zip` : `${tipo}_${hora}_${fecha}.csv`;
       downloadBlobResponse(response, fallbackName);
       showToast('Archivo descargado correctamente', 'success');
     } catch (error) {

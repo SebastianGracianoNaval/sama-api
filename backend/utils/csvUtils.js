@@ -129,8 +129,8 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
     if (datosCombinados.length <= 1) {
         return null;
     }
-    // Usar un nombre fijo para el archivo consolidado
-    const nombreArchivo = `consolidado.csv`;
+    // Usar un nombre único para cada tipo de archivo consolidado
+    const nombreArchivo = `${tipo}_consolidado.csv`;
     const rutaConsolidada = path.join(directorio, nombreArchivo);
     fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
     return rutaConsolidada;
