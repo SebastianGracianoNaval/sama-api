@@ -73,7 +73,17 @@ const Reportes = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `reporte-${tipo}.csv`;
+
+      // Obtener el nombre del archivo del header Content-Disposition
+      let filename = '';
+      const disposition = response.headers['content-disposition'];
+      if (disposition && disposition.indexOf('filename=') !== -1) {
+        filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+      } else {
+        filename = `reporte-${tipo}.csv`; // fallback
+      }
+      a.download = filename;
+
       document.body.appendChild(a);
       a.click();
       a.remove();
