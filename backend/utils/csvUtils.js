@@ -2,7 +2,6 @@ const { Parser } = require('json2csv');
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
-const { generarNombreCsv } = require('./blipUtils');
 
 /**
  * Convierte un objeto JSON a formato CSV
@@ -96,77 +95,43 @@ const fechaEnRango = (fechaStr, fechas) => {
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
  */
 const consolidarCsvs = async (directorio, tipo, fechas = null) => {
-    console.log('[consolidarCsvs] Iniciando consolidación para tipo:', tipo);
-    console.log('[consolidarCsvs] Carpeta:', directorio);
-    console.log('[consolidarCsvs] Fechas:', fechas);
-
     const archivos = fs.readdirSync(directorio)
         .filter(archivo => archivo.endsWith('.csv'));
-    console.log('[consolidarCsvs] Archivos encontrados:', archivos);
-
     if (archivos.length === 0) {
-        console.log('[consolidarCsvs] No se encontraron archivos CSV');
         return null;
     }
-
     let datosCombinados = [];
     let encabezados = null;
-    let incluidas = 0;
-    let descartadas = 0;
-
     for (const archivo of archivos) {
-        console.log('[consolidarCsvs] Procesando archivo:', archivo);
         const rutaArchivo = path.join(directorio, archivo);
         const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
         const lineas = contenido.split('\n');
-        
         if (!encabezados) {
             encabezados = lineas[0];
             datosCombinados.push(encabezados);
-            console.log('[consolidarCsvs] Encabezados:', encabezados);
         }
-
         const columnas = encabezados.split(',').map(col => col.trim());
         const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
-        console.log('[consolidarCsvs] Índice de fechaFiltro:', fechaIndex);
-
         for (let i = 1; i < lineas.length; i++) {
             const linea = lineas[i].trim();
             if (!linea) continue;
-
             if (fechas && fechaIndex !== -1) {
-                const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                const valores = linea.match(/(?:\"[^\"]*\"|[^,])+/g).map(v => v.trim().replace(/^\"|\"$/g, ''));
                 const fecha = valores[fechaIndex];
-                console.log(`[consolidarCsvs] Línea ${i}: fechaFiltro='${fecha}', fechaInicio='${fechas.fechaInicio}', fechaFin='${fechas.fechaFin}'`);
-                
                 if (fecha && fecha >= fechas.fechaInicio && fecha <= fechas.fechaFin) {
-                    incluidas++;
                     datosCombinados.push(linea);
-                    console.log(`[consolidarCsvs] Línea ${i} INCLUIDA`);
-                } else {
-                    descartadas++;
-                    console.log(`[consolidarCsvs] Línea ${i} DESCARTADA`);
                 }
             } else {
                 datosCombinados.push(linea);
-                incluidas++;
             }
         }
     }
-
-    console.log(`[consolidarCsvs] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
-
     if (datosCombinados.length <= 1) {
-        console.log('[consolidarCsvs] No hay datos después del filtrado');
         return null;
     }
-
-    const nombreArchivo = generarNombreCsv(tipo);
-    console.log('[consolidarCsvs] Nombre de archivo generado:', nombreArchivo);
-    
+    // Usar un nombre simple para el archivo consolidado
+    const nombreArchivo = `${tipo}-consolidado.csv`;
     const rutaConsolidada = path.join(directorio, nombreArchivo);
-    console.log('[consolidarCsvs] Guardando archivo consolidado en:', rutaConsolidada);
-    
     fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
     return rutaConsolidada;
 };

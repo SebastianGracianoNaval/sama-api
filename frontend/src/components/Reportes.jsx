@@ -14,6 +14,7 @@ import ContactsIcon from '@mui/icons-material/Contacts';
 import EventIcon from '@mui/icons-material/Event';
 import AllInboxIcon from '@mui/icons-material/AllInbox';
 import ClearIcon from '@mui/icons-material/Clear';
+import { downloadBlobResponse } from '../utils/downloadFile';
 
 const Reportes = () => {
   const [fechaInicio, setFechaInicio] = useState('');
@@ -69,26 +70,7 @@ const Reportes = () => {
           return;
       }
 
-      const blob = new Blob([response.data]);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-
-      // Obtener el nombre del archivo del header Content-Disposition
-      let filename = '';
-      const disposition = response.headers['content-disposition'];
-      if (disposition && disposition.indexOf('filename=') !== -1) {
-        filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
-      } else {
-        filename = `reporte-${tipo}.csv`; // fallback
-      }
-      a.download = filename;
-
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      
+      downloadBlobResponse(response, `reporte-${tipo}.csv`);
       showToast('Archivo descargado correctamente', 'success');
     } catch (error) {
       showToast(error.message || 'Error al descargar el archivo', 'error');

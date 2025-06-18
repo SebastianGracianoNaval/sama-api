@@ -88,27 +88,10 @@ const validarTicketCerrado = (ticket) => {
     return true;
 };
 
-/**
- * Genera un nombre de archivo CSV con el formato estándar
- * @param {string} tipo - Tipo de archivo (mensaje, ticket, evento, contacto)
- * @param {Date} [fecha=null] - Fecha opcional para el nombre del archivo. Si no se proporciona, se usa la fecha actual
- * @returns {string} Nombre del archivo en formato {tipo}_{HH-MM-SS}_{YYYY-MM-DD}.csv
- */
-function generarNombreCsv(tipo, fecha = null) {
-    console.log('[generarNombreCsv] Iniciando generación de nombre para tipo:', tipo);
-    const now = fecha || new Date();
-    const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-    const fechaStr = now.toISOString().slice(0,10);
-    const nombre = `${tipo}_${hora}_${fechaStr}.csv`;
-    console.log('[generarNombreCsv] Nombre generado:', nombre);
-    return nombre;
-}
-
 module.exports = {
     identificarTipoJson,
     obtenerRutaCarpeta,
     generarNombreArchivo,
     detectarCierreTicket,
-    validarTicketCerrado,
-    generarNombreCsv
+    validarTicketCerrado
 }; 
