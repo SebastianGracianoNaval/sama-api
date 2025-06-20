@@ -14,11 +14,48 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
         // Asegurarnos que jsonData sea un array
         const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
 
-        // Aplanar todos los objetos y asegurar que todos tengan fechaFiltro
+        // Aplanar todos los objetos y asegurar que todos tengan fechaFiltro al final
         const flattenedData = dataArray.map(obj => {
-            const flat = flattenObject(obj);
-            // Forzar que fechaFiltro esté presente y al final
-            flat['fechaFiltro'] = obj['fechaFiltro'] || '';
+            let objCopy = { ...obj };
+            // Si el objeto ya trae fechaFiltro, lo renombramos a fechaFiltroOriginal
+            if (Object.prototype.hasOwnProperty.call(objCopy, 'fechaFiltro')) {
+                objCopy['fechaFiltroOriginal'] = objCopy['fechaFiltro'];
+                delete objCopy['fechaFiltro'];
+            }
+            const flat = flattenObject(objCopy);
+            
+            // Buscar una fecha válida para el campo de sistema fechaFiltro
+            let fechaFiltro = '';
+            const fechaKeys = Object.keys(flat).filter(key => 
+                key.includes('date') || 
+                key.includes('Date') || 
+                key.includes('timestamp') || 
+                key.includes('Timestamp') ||
+                key.includes('storageDate')
+            );
+            for (const key of fechaKeys) {
+                const valor = flat[key];
+                if (valor && typeof valor === 'string') {
+                    const fechaMatch = valor.match(/^\d{4}-\d{2}-\d{2}/);
+                    if (fechaMatch) {
+                        fechaFiltro = fechaMatch[0];
+                        break;
+                    }
+                } else if (valor && typeof valor === 'number') {
+                    try {
+                        const fecha = new Date(valor);
+                        if (!isNaN(fecha.getTime())) {
+                            fechaFiltro = fecha.toISOString().slice(0, 10);
+                            break;
+                        }
+                    } catch (e) {}
+                }
+            }
+            if (!fechaFiltro) {
+                fechaFiltro = new Date().toISOString().slice(0, 10);
+            }
+            // Agregar el campo fechaFiltro al final
+            flat['fechaFiltro'] = fechaFiltro;
             return flat;
         });
 
@@ -77,11 +114,20 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
 const fechaEnRango = (fechaStr, fechas) => {
     if (!fechas) return true;
     if (!fechaStr) return false;
+    
+    // Validar que la fecha tenga el formato correcto (yyyy-mm-dd)
+    const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!fechaRegex.test(fechaStr.trim())) {
+        console.log(`[fechaEnRango] Fecha inválida ignorada: '${fechaStr}'`);
+        return false;
+    }
+    
     // Tomar solo la parte yyyy-mm-dd de cada fecha
-    const fechaLimpia = fechaStr.trim().slice(0, 10);
+    const fechaLimpia = fechaStr.trim();
     const inicio = fechas.fechaInicio;
     const fin = fechas.fechaFin;
     const entra = (fechaLimpia >= inicio && fechaLimpia <= fin);
+    
     // Debug
     console.log(`[fechaEnRango] fechaFiltro: '${fechaLimpia}', inicio: '${inicio}', fin: '${fin}', entra: ${entra}`);
     return entra;
@@ -102,6 +148,9 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
     }
     let datosCombinados = [];
     let encabezados = null;
+    let incluidas = 0;
+    let descartadas = 0;
+    
     for (const archivo of archivos) {
         const rutaArchivo = path.join(directorio, archivo);
         const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
@@ -112,23 +161,40 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         }
         const columnas = encabezados.split(',').map(col => col.trim());
         const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
+        
         for (let i = 1; i < lineas.length; i++) {
             const linea = lineas[i].trim();
             if (!linea) continue;
+            
             if (fechas && fechaIndex !== -1) {
-                const valores = linea.match(/(?:\"[^\"]*\"|[^,])+/g).map(v => v.trim().replace(/^\"|\"$/g, ''));
-                const fecha = valores[fechaIndex];
-                if (fecha && fecha >= fechas.fechaInicio && fecha <= fechas.fechaFin) {
-                    datosCombinados.push(linea);
+                try {
+                    const valores = linea.match(/(?:\"[^\"]*\"|[^,])+/g).map(v => v.trim().replace(/^\"|\"$/g, ''));
+                    const fecha = valores[fechaIndex];
+                    
+                    if (fechaEnRango(fecha, fechas)) {
+                        incluidas++;
+                        datosCombinados.push(linea);
+                    } else {
+                        descartadas++;
+                    }
+                } catch (error) {
+                    console.warn(`[consolidarCsvs] Error procesando línea ${i}:`, error.message);
+                    descartadas++;
                 }
             } else {
                 datosCombinados.push(linea);
+                incluidas++;
             }
         }
     }
+    
+    console.log(`[consolidarCsvs] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+    
     if (datosCombinados.length <= 1) {
+        console.log('[consolidarCsvs] No hay datos después del filtrado.');
         return null;
     }
+    
     // Usar un nombre único para cada tipo de archivo consolidado
     const nombreArchivo = `${tipo}_consolidado.csv`;
     const rutaConsolidada = path.join(directorio, nombreArchivo);
@@ -259,12 +325,18 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 if (!linea) continue;
                 
                 if (fechas && fechaIndex !== -1) {
-                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    const fecha = valores[fechaIndex];
-                    if (fecha && fecha >= fechas.fechaInicio && fecha <= fechas.fechaFin) {
-                        incluidas++;
-                        datosCombinados.push(linea);
-                    } else {
+                    try {
+                        const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                        const fecha = valores[fechaIndex];
+                        
+                        if (fechaEnRango(fecha, fechas)) {
+                            incluidas++;
+                            datosCombinados.push(linea);
+                        } else {
+                            descartadas++;
+                        }
+                    } catch (error) {
+                        console.warn(`[consolidarTicketsCsvs] Error procesando línea ${i}:`, error.message);
                         descartadas++;
                     }
                 } else {

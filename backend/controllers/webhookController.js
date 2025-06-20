@@ -26,35 +26,53 @@ const handleWebhook = async (req, res) => {
         // Buscar la fecha más relevante y formatearla a yyyy-mm-dd
         function obtenerFechaFiltro(obj) {
             let fecha = null;
-            if (obj.metadata && obj.metadata['#envelope.storageDate']) {
-                fecha = obj.metadata['#envelope.storageDate'];
-            } else if (obj.metadata && obj.metadata['#wa.timestamp']) {
-                const ts = Number(obj.metadata['#wa.timestamp']);
-                if (!isNaN(ts)) fecha = new Date(ts * 1000).toISOString();
-            } else if (obj.storageDate) {
-                fecha = obj.storageDate;
-            } else if (obj['#envelope.storageDate']) {
-                fecha = obj['#envelope.storageDate'];
-            } else if (obj['#wa.timestamp']) {
-                const ts = Number(obj['#wa.timestamp']);
-                if (!isNaN(ts)) fecha = new Date(ts * 1000).toISOString();
-            } else if (obj['#date_processed']) {
-                const ts = Number(obj['#date_processed']);
-                if (!isNaN(ts)) fecha = new Date(ts).toISOString();
-            } else if (obj.date_created) {
-                const ts = Number(obj.date_created);
-                if (!isNaN(ts)) fecha = new Date(ts).toISOString();
-            } else if (obj.lastMessageDate) {
-                fecha = obj.lastMessageDate;
+            
+            // Priorizar campos de fecha en orden de importancia
+            const fechaFields = [
+                'metadata.#envelope.storageDate',
+                'metadata.#wa.timestamp',
+                'storageDate',
+                '#envelope.storageDate',
+                '#wa.timestamp',
+                '#date_processed',
+                'date_created',
+                'lastMessageDate'
+            ];
+            
+            for (const field of fechaFields) {
+                const value = obj[field];
+                if (!value) continue;
+                
+                if (typeof value === 'string') {
+                    // Intentar extraer fecha de formato ISO
+                    const fechaMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
+                    if (fechaMatch) {
+                        fecha = fechaMatch[0];
+                        break;
+                    }
+                } else if (typeof value === 'number') {
+                    // Intentar convertir timestamp a fecha
+                    try {
+                        const fechaObj = new Date(value);
+                        if (!isNaN(fechaObj.getTime())) {
+                            fecha = fechaObj.toISOString().slice(0, 10);
+                            break;
+                        }
+                    } catch (e) {
+                        // Ignorar errores de conversión
+                    }
+                }
             }
-            // Validar que sea una fecha yyyy-mm-dd
-            if (fecha && /^\d{4}-\d{2}-\d{2}/.test(fecha.slice(0, 10))) {
-                console.log('[fechaFiltro válido]', fecha.slice(0, 10));
-                return fecha.slice(0, 10);
+            
+            // Validar que sea una fecha válida en formato yyyy-mm-dd
+            if (fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+                console.log('[fechaFiltro válido]', fecha);
+                return fecha;
             }
+            
             // Si no hay fecha válida, usar la fecha actual y loguear el objeto
             const hoy = new Date().toISOString().slice(0, 10);
-            console.warn('[fechaFiltro inválido, asignando fecha actual]', hoy, 'obj:', obj);
+            console.warn('[fechaFiltro inválido, asignando fecha actual]', hoy, 'obj:', JSON.stringify(obj, null, 2));
             return hoy;
         }
         function addFechaFiltro(obj) {

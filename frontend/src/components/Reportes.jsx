@@ -13,7 +13,6 @@ import MailIcon from '@mui/icons-material/Mail';
 import ContactsIcon from '@mui/icons-material/Contacts';
 import EventIcon from '@mui/icons-material/Event';
 import AllInboxIcon from '@mui/icons-material/AllInbox';
-import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import ClearIcon from '@mui/icons-material/Clear';
 import { downloadBlobResponse } from '../utils/downloadFile';
 
@@ -66,9 +65,6 @@ const Reportes = () => {
           break;
         case 'todo':
           response = await reportService.downloadAll(fechaInicio, fechaFin);
-          break;
-        case 'tickets':
-          response = await reportService.downloadTickets(fechaInicio, fechaFin);
           break;
         default:
           return;
@@ -148,15 +144,6 @@ const Reportes = () => {
             onClick={() => descargarArchivo('eventos')}
           >
             EVENTOS
-          </Button>
-          <Button
-            variant="contained"
-            color="warning"
-            startIcon={<ConfirmationNumberIcon />}
-            sx={{ borderRadius: 3, minWidth: 120, fontWeight: 600 }}
-            onClick={() => descargarArchivo('tickets')}
-          >
-            TICKETS
           </Button>
           <Button
             variant="contained"
