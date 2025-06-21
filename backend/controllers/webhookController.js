@@ -1,4 +1,13 @@
-const { convertJsonToCsv, consolidarCsvs, flattenObject, consolidarTicketsCsvs, generarTicketIndividual } = require('../utils/csvUtils');
+const { 
+    procesarMensajes, 
+    procesarContactos, 
+    procesarEventos, 
+    procesarTickets,
+    consolidarCsvs, 
+    consolidarCsvsMejorado,
+    consolidarTicketsCsvs, 
+    generarTicketIndividual 
+} = require('../utils/csvUtils');
 const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo, detectarCierreTicket } = require('../utils/blipUtils');
 const path = require('path');
 
@@ -23,91 +32,45 @@ const handleWebhook = async (req, res) => {
             });
         }
 
-        // Buscar la fecha más relevante y formatearla a yyyy-mm-dd
-        function obtenerFechaFiltro(obj) {
-            let fecha = null;
-            
-            // Priorizar campos de fecha en orden de importancia
-            const fechaFields = [
-                'metadata.#envelope.storageDate',
-                'metadata.#wa.timestamp',
-                'storageDate',
-                '#envelope.storageDate',
-                '#wa.timestamp',
-                '#date_processed',
-                'date_created',
-                'lastMessageDate'
-            ];
-            
-            for (const field of fechaFields) {
-                const value = obj[field];
-                if (!value) continue;
-                
-                if (typeof value === 'string') {
-                    // Intentar extraer fecha de formato ISO
-                    const fechaMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
-                    if (fechaMatch) {
-                        fecha = fechaMatch[0];
-                        break;
-                    }
-                } else if (typeof value === 'number') {
-                    // Intentar convertir timestamp a fecha
-                    try {
-                        const fechaObj = new Date(value);
-                        if (!isNaN(fechaObj.getTime())) {
-                            fecha = fechaObj.toISOString().slice(0, 10);
-                            break;
-                        }
-                    } catch (e) {
-                        // Ignorar errores de conversión
-                    }
-                }
-            }
-            
-            // Validar que sea una fecha válida en formato yyyy-mm-dd
-            if (fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-                console.log('[fechaFiltro válido]', fecha);
-                return fecha;
-            }
-            
-            // Si no hay fecha válida, usar la fecha actual y loguear el objeto
-            const hoy = new Date().toISOString().slice(0, 10);
-            console.warn('[fechaFiltro inválido, asignando fecha actual]', hoy, 'obj:', JSON.stringify(obj, null, 2));
-            return hoy;
-        }
-        function addFechaFiltro(obj) {
-            const fechaFiltro = obtenerFechaFiltro(obj);
-            const objWithFecha = { ...obj, fechaFiltro };
-            const flat = flattenObject(objWithFecha);
-            return flat;
-        }
-        let dataConFechaFiltro;
-        if (Array.isArray(jsonData)) {
-            dataConFechaFiltro = jsonData.map(item => addFechaFiltro(item));
-        } else {
-            dataConFechaFiltro = [addFechaFiltro(jsonData)];
-        }
-        console.log('[Webhook] Datos con fechaFiltro:', dataConFechaFiltro);
-        // Convertir JSON a CSV (siempre como array de objetos planos)
+        // Identificar el tipo de dato
         const tipo = identificarTipoJson(jsonData);
         console.log('[Webhook] Tipo identificado:', tipo);
-        if (!tipo) {
+        
+        if (!tipo || tipo === 'desconocido') {
             console.error('[Webhook] No se pudo identificar el tipo de datos del JSON recibido');
             return res.status(400).json({
                 success: false,
                 message: 'No se pudo identificar el tipo de datos del JSON recibido'
             });
         }
-        // Si es ticket, agregar campos cerrado y fechaCierre
-        if (tipo === 'ticket') {
-            dataConFechaFiltro = dataConFechaFiltro.map(ticket => {
-                const cierre = detectarCierreTicket(ticket);
-                console.log(`[Webhook] Ticket ${ticket['content.sequentialId'] || ''} cerrado:`, cierre);
-                return { ...ticket, cerrado: cierre.cerrado, fechaCierre: cierre.fechaCierre };
-            });
+
+        // Procesar según el tipo usando las funciones específicas
+        const carpeta = obtenerRutaCarpeta(tipo);
+        const nombreArchivo = generarNombreArchivo(tipo);
+        const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
+        
+        console.log('[Webhook] Procesando con función específica para:', tipo);
+        console.log('[Webhook] Guardando CSV en:', outputPath);
+
+        let rutaArchivo;
+        switch (tipo) {
+            case 'mensaje':
+                rutaArchivo = await procesarMensajes(jsonData, outputPath);
+                break;
+            case 'contacto':
+                rutaArchivo = await procesarContactos(jsonData, outputPath);
+                break;
+            case 'evento':
+                rutaArchivo = await procesarEventos(jsonData, outputPath);
+                break;
+            case 'ticket':
+                rutaArchivo = await procesarTickets(jsonData, outputPath);
+                break;
+            default:
+                throw new Error(`Tipo no soportado: ${tipo}`);
         }
 
-        // --- LÓGICA DE TICKETS (generación automática de archivos individuales) ---
+        // --- LÓGICA ESPECIAL PARA TICKETS (tracking de conversaciones) ---
         if (tipo === 'ticket' || tipo === 'mensaje' || tipo === 'evento') {
             // Función para extraer el número de teléfono del contacto
             const extraerContacto = (obj) => {
@@ -128,8 +91,9 @@ const handleWebhook = async (req, res) => {
                 return null;
             };
 
-            // Procesar cada elemento del webhook
-            for (const item of dataConFechaFiltro) {
+            // Procesar cada elemento del webhook para tracking de tickets
+            const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+            for (const item of dataArray) {
                 const contacto = extraerContacto(item);
                 if (!contacto) continue;
 
@@ -174,7 +138,7 @@ const handleWebhook = async (req, res) => {
                             ticketInfo.fechaCierre = item['storageDate'] || item['fechaFiltro'];
                             console.log(`[Ticket] Caja CERRADA para contacto ${contacto} (seqId: ${ticketInfo.ticket['content.sequentialId']})`);
                             
-                            // Generar archivo individual del ticket
+                            // Generar archivo individual del ticket con conversación
                             try {
                                 const carpeta = obtenerRutaCarpeta('ticket');
                                 const rutaCarpeta = path.join(__dirname, '..', carpeta);
@@ -189,17 +153,11 @@ const handleWebhook = async (req, res) => {
             }
         }
 
-        const carpeta = obtenerRutaCarpeta(tipo);
-        const nombreArchivo = generarNombreArchivo(tipo);
-        const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
-        console.log('[Webhook] Guardando CSV en:', outputPath);
-        await convertJsonToCsv(dataConFechaFiltro, outputPath);
-
         res.status(200).json({
             success: true,
             message: 'Datos procesados correctamente',
             tipo: tipo,
-            filePath: outputPath
+            filePath: rutaArchivo
         });
 
     } catch (error) {
@@ -370,7 +328,7 @@ const consolidarTickets = async (req, res) => {
             });
         }
         const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
-        const rutaConsolidada = await consolidarTicketsCsvs(pathCarpeta, fechas);
+        const rutaConsolidada = await consolidarCsvsMejorado(pathCarpeta, tipo, fechas);
         res.status(200).json({
             success: true,
             message: 'Tickets consolidados correctamente',

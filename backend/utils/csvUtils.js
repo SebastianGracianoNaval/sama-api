@@ -134,18 +134,23 @@ const fechaEnRango = (fechaStr, fechas) => {
 };
 
 /**
- * Consolida todos los archivos CSV de un directorio en uno solo
+ * Consolida archivos CSV con estructura mejorada según el tipo
  * @param {string} directorio - Ruta del directorio que contiene los archivos CSV
  * @param {string} tipo - Tipo de datos ('mensaje', 'evento', 'contacto')
  * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
  */
-const consolidarCsvs = async (directorio, tipo, fechas = null) => {
+const consolidarCsvsMejorado = async (directorio, tipo, fechas = null) => {
     const archivos = fs.readdirSync(directorio)
-        .filter(archivo => archivo.endsWith('.csv'));
+        .filter(archivo => archivo.endsWith('.csv') && !archivo.includes('consolidado'));
+    
     if (archivos.length === 0) {
+        console.log(`[consolidarCsvsMejorado] No hay archivos CSV de ${tipo} para consolidar`);
         return null;
     }
+    
+    console.log(`[consolidarCsvsMejorado] Archivos encontrados para ${tipo}:`, archivos);
+    
     let datosCombinados = [];
     let encabezados = null;
     let incluidas = 0;
@@ -155,10 +160,12 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         const rutaArchivo = path.join(directorio, archivo);
         const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
         const lineas = contenido.split('\n');
+        
         if (!encabezados) {
             encabezados = lineas[0];
             datosCombinados.push(encabezados);
         }
+        
         const columnas = encabezados.split(',').map(col => col.trim());
         const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
         
@@ -178,7 +185,7 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
                         descartadas++;
                     }
                 } catch (error) {
-                    console.warn(`[consolidarCsvs] Error procesando línea ${i}:`, error.message);
+                    console.warn(`[consolidarCsvsMejorado] Error procesando línea ${i}:`, error.message);
                     descartadas++;
                 }
             } else {
@@ -188,22 +195,28 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         }
     }
     
-    console.log(`[consolidarCsvs] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+    console.log(`[consolidarCsvsMejorado] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
     
     if (datosCombinados.length <= 1) {
-        console.log('[consolidarCsvs] No hay datos después del filtrado.');
+        console.log('[consolidarCsvsMejorado] No hay datos después del filtrado.');
         return null;
     }
     
     // Usar un nombre único para cada tipo de archivo consolidado
-    const nombreArchivo = `${tipo}_consolidado.csv`;
+    const now = new Date();
+    const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+    const fecha = now.toISOString().slice(0,10);
+    const nombreArchivo = `${tipo}_consolidado_${hora}_${fecha}.csv`;
     const rutaConsolidada = path.join(directorio, nombreArchivo);
+    
     fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
+    console.log(`[consolidarCsvsMejorado] Archivo consolidado generado: ${rutaConsolidada}`);
+    
     return rutaConsolidada;
 };
 
 /**
- * Genera un archivo CSV individual para un ticket cerrado
+ * Genera un archivo CSV individual para un ticket cerrado con estructura limpia
  * @param {Object} ticketInfo - Información del ticket cerrado
  * @param {string} directorio - Directorio base donde guardar el archivo
  * @returns {string} - Ruta del archivo generado
@@ -241,11 +254,32 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             return `[${fecha}] ${m.content || ''}`;
         }).join('\n');
 
-        // Preparar datos del ticket
-        const ticketData = { ...ticket };
-        ticketData.cerrado = true;
-        ticketData.fechaCierre = ticketInfo.fechaCierre;
-        ticketData.conversacion = conversacion;
+        // Preparar datos del ticket con estructura limpia
+        const ticketData = {
+            // Campos básicos del ticket
+            id: ticket.id || '',
+            sequentialId: ticket['content.sequentialId'] || '',
+            status: ticket['content.status'] || '',
+            team: ticket['content.team'] || '',
+            unreadMessages: ticket['content.unreadMessages'] || '',
+            
+            // Campos de metadatos
+            storageDate: ticket['metadata.#envelope.storageDate'] || ticket.storageDate || '',
+            timestamp: ticket['metadata.#wa.timestamp'] || ticket.timestamp || '',
+            
+            // Campos de estado actualizados
+            estadoTicket: 'cerrado',
+            fechaCierre: ticketInfo.fechaCierre || '',
+            
+            // Campos de sistema
+            fechaFiltro: obtenerFechaFiltro(ticket),
+            tipoDato: 'ticket',
+            procesadoEn: new Date().toISOString(),
+            
+            // Campo especial para tickets cerrados
+            conversacion: conversacion,
+            contacto: contacto
+        };
 
         // Generar nombre del archivo con el formato ticket_{sequentialId}_{fecha}
         const fechaCierre = new Date(ticketInfo.fechaCierre || ticket.fechaFiltro);
@@ -258,16 +292,18 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             fs.mkdirSync(carpetaReportes, { recursive: true });
         }
 
-        // Generar CSV individual para este ticket
-        const encabezados = Object.keys(ticketData);
-        const encabezadosFinal = [...encabezados.filter(e => e !== 'conversacion'), 'conversacion'];
-        const csvLines = [encabezadosFinal.join(',')];
+        // Generar CSV con campos específicos para tickets cerrados
+        const campos = [
+            'id', 'sequentialId', 'status', 'team', 'unreadMessages',
+            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre',
+            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto'
+        ];
         
-        const line = encabezadosFinal.map(col => ticketData[col] !== undefined ? (`"${String(ticketData[col]).replace(/"/g, '""')}"`) : '').join(',');
-        csvLines.push(line);
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse([ticketData]);
 
         const rutaArchivo = path.join(carpetaReportes, nombreArchivo);
-        fs.writeFileSync(rutaArchivo, csvLines.join('\n'));
+        fs.writeFileSync(rutaArchivo, csv);
         
         console.log(`[generarTicketIndividual] Archivo generado: ${nombreArchivo} para contacto ${contacto}`);
         return rutaArchivo;
@@ -383,10 +419,276 @@ function flattenObject(obj, prefix = '') {
     }, {});
 }
 
+/**
+ * Procesa mensajes y los convierte a CSV con estructura limpia
+ * @param {Object|Array} jsonData - Datos JSON del webhook
+ * @param {string} outputPath - Ruta donde guardar el CSV
+ * @returns {Promise<string>} - Ruta del archivo generado
+ */
+const procesarMensajes = async (jsonData, outputPath) => {
+    try {
+        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+        
+        const mensajesProcesados = dataArray.map(mensaje => {
+            // Extraer solo campos relevantes de mensajes
+            const mensajeLimpio = {
+                // Campos básicos del mensaje
+                id: mensaje.id || '',
+                from: mensaje.from || '',
+                to: mensaje.to || '',
+                type: mensaje.type || '',
+                content: mensaje.content || '',
+                
+                // Campos de metadatos
+                storageDate: mensaje['metadata.#envelope.storageDate'] || mensaje.storageDate || '',
+                timestamp: mensaje['metadata.#wa.timestamp'] || mensaje.timestamp || '',
+                
+                // Campos de sistema
+                fechaFiltro: obtenerFechaFiltro(mensaje),
+                tipoDato: 'mensaje',
+                procesadoEn: new Date().toISOString()
+            };
+            
+            return mensajeLimpio;
+        });
+
+        // Generar CSV con campos específicos
+        const campos = [
+            'id', 'from', 'to', 'type', 'content', 
+            'storageDate', 'timestamp', 'fechaFiltro', 'tipoDato', 'procesadoEn'
+        ];
+        
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(mensajesProcesados);
+        
+        // Asegurar directorio
+        const dir = path.dirname(outputPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        fs.writeFileSync(outputPath, csv);
+        return outputPath;
+    } catch (error) {
+        throw new Error(`Error al procesar mensajes: ${error.message}`);
+    }
+};
+
+/**
+ * Procesa contactos y los convierte a CSV con estructura limpia
+ * @param {Object|Array} jsonData - Datos JSON del webhook
+ * @param {string} outputPath - Ruta donde guardar el CSV
+ * @returns {Promise<string>} - Ruta del archivo generado
+ */
+const procesarContactos = async (jsonData, outputPath) => {
+    try {
+        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+        
+        const contactosProcesados = dataArray.map(contacto => {
+            const contactoLimpio = {
+                // Campos básicos del contacto
+                identity: contacto.identity || '',
+                name: contacto.name || '',
+                phoneNumber: contacto.phoneNumber || '',
+                email: contacto.email || '',
+                
+                // Campos de estado
+                lastMessageDate: contacto.lastMessageDate || '',
+                status: contacto.status || '',
+                
+                // Campos de sistema
+                fechaFiltro: obtenerFechaFiltro(contacto),
+                tipoDato: 'contacto',
+                procesadoEn: new Date().toISOString()
+            };
+            
+            return contactoLimpio;
+        });
+
+        const campos = [
+            'identity', 'name', 'phoneNumber', 'email', 
+            'lastMessageDate', 'status', 'fechaFiltro', 'tipoDato', 'procesadoEn'
+        ];
+        
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(contactosProcesados);
+        
+        const dir = path.dirname(outputPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        fs.writeFileSync(outputPath, csv);
+        return outputPath;
+    } catch (error) {
+        throw new Error(`Error al procesar contactos: ${error.message}`);
+    }
+};
+
+/**
+ * Procesa eventos y los convierte a CSV con estructura limpia
+ * @param {Object|Array} jsonData - Datos JSON del webhook
+ * @param {string} outputPath - Ruta donde guardar el CSV
+ * @returns {Promise<string>} - Ruta del archivo generado
+ */
+const procesarEventos = async (jsonData, outputPath) => {
+    try {
+        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+        
+        const eventosProcesados = dataArray.map(evento => {
+            const eventoLimpio = {
+                // Campos básicos del evento
+                id: evento.id || '',
+                category: evento.category || '',
+                action: evento.action || '',
+                from: evento.from || '',
+                to: evento.to || '',
+                
+                // Campos de metadatos
+                storageDate: evento['metadata.#envelope.storageDate'] || evento.storageDate || '',
+                timestamp: evento['metadata.#wa.timestamp'] || evento.timestamp || '',
+                
+                // Campos específicos de eventos
+                previousStateName: evento['extras.#previousStateName'] || '',
+                previousStateId: evento['extras.#previousStateId'] || '',
+                currentStateName: evento['extras.#currentStateName'] || '',
+                currentStateId: evento['extras.#currentStateId'] || '',
+                
+                // Campos de sistema
+                fechaFiltro: obtenerFechaFiltro(evento),
+                tipoDato: 'evento',
+                procesadoEn: new Date().toISOString()
+            };
+            
+            return eventoLimpio;
+        });
+
+        const campos = [
+            'id', 'category', 'action', 'from', 'to',
+            'storageDate', 'timestamp', 'previousStateName', 'previousStateId',
+            'currentStateName', 'currentStateId', 'fechaFiltro', 'tipoDato', 'procesadoEn'
+        ];
+        
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(eventosProcesados);
+        
+        const dir = path.dirname(outputPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        fs.writeFileSync(outputPath, csv);
+        return outputPath;
+    } catch (error) {
+        throw new Error(`Error al procesar eventos: ${error.message}`);
+    }
+};
+
+/**
+ * Procesa tickets y los convierte a CSV con estructura limpia
+ * @param {Object|Array} jsonData - Datos JSON del webhook
+ * @param {string} outputPath - Ruta donde guardar el CSV
+ * @returns {Promise<string>} - Ruta del archivo generado
+ */
+const procesarTickets = async (jsonData, outputPath) => {
+    try {
+        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+        
+        const ticketsProcesados = dataArray.map(ticket => {
+            const ticketLimpio = {
+                // Campos básicos del ticket
+                id: ticket.id || '',
+                sequentialId: ticket['content.sequentialId'] || '',
+                status: ticket['content.status'] || '',
+                team: ticket['content.team'] || '',
+                unreadMessages: ticket['content.unreadMessages'] || '',
+                
+                // Campos de metadatos
+                storageDate: ticket['metadata.#envelope.storageDate'] || ticket.storageDate || '',
+                timestamp: ticket['metadata.#wa.timestamp'] || ticket.timestamp || '',
+                
+                // Campos de estado (se actualizarán cuando se cierre)
+                estadoTicket: 'abierto',
+                fechaCierre: '',
+                
+                // Campos de sistema
+                fechaFiltro: obtenerFechaFiltro(ticket),
+                tipoDato: 'ticket',
+                procesadoEn: new Date().toISOString()
+            };
+            
+            return ticketLimpio;
+        });
+
+        const campos = [
+            'id', 'sequentialId', 'status', 'team', 'unreadMessages',
+            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre',
+            'fechaFiltro', 'tipoDato', 'procesadoEn'
+        ];
+        
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(ticketsProcesados);
+        
+        const dir = path.dirname(outputPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        fs.writeFileSync(outputPath, csv);
+        return outputPath;
+    } catch (error) {
+        throw new Error(`Error al procesar tickets: ${error.message}`);
+    }
+};
+
+/**
+ * Obtiene la fecha de filtro de un objeto
+ * @param {Object} obj - Objeto del webhook
+ * @returns {string} - Fecha en formato YYYY-MM-DD
+ */
+const obtenerFechaFiltro = (obj) => {
+    const fechaFields = [
+        'metadata.#envelope.storageDate',
+        'metadata.#wa.timestamp',
+        'storageDate',
+        '#envelope.storageDate',
+        '#wa.timestamp',
+        '#date_processed',
+        'date_created',
+        'lastMessageDate'
+    ];
+    
+    for (const field of fechaFields) {
+        const value = obj[field];
+        if (!value) continue;
+        
+        if (typeof value === 'string') {
+            const fechaMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
+            if (fechaMatch) {
+                return fechaMatch[0];
+            }
+        } else if (typeof value === 'number') {
+            try {
+                const fechaObj = new Date(value);
+                if (!isNaN(fechaObj.getTime())) {
+                    return fechaObj.toISOString().slice(0, 10);
+                }
+            } catch (e) {}
+        }
+    }
+    
+    return new Date().toISOString().slice(0, 10);
+};
+
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
+    consolidarCsvsMejorado,
     flattenObject,
     consolidarTicketsCsvs,
-    generarTicketIndividual
+    generarTicketIndividual,
+    procesarMensajes,
+    procesarContactos,
+    procesarEventos,
+    procesarTickets
 }; 
