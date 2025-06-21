@@ -541,23 +541,38 @@ const procesarEventos = async (jsonData, outputPath) => {
         const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
         
         const eventosProcesados = dataArray.map(evento => {
+            // Extraer campos anidados correctamente
+            const extras = evento.extras || {};
+            const contact = evento.contact || {};
+            
             const eventoLimpio = {
                 // Campos básicos del evento
                 id: evento.id || '',
+                ownerIdentity: evento.ownerIdentity || '',
+                identity: evento.identity || '',
+                messageId: evento.messageId || '',
                 category: evento.category || '',
                 action: evento.action || '',
-                from: evento.from || '',
-                to: evento.to || '',
+                
+                // Campos de contacto
+                contactIdentity: contact.Identity || '',
                 
                 // Campos de metadatos
-                storageDate: evento['metadata.#envelope.storageDate'] || evento.storageDate || '',
-                timestamp: evento['metadata.#wa.timestamp'] || evento.timestamp || '',
+                storageDate: evento.storageDate || '',
+                timestamp: evento.timestamp || '',
                 
-                // Campos específicos de eventos
-                previousStateName: evento['extras.#previousStateName'] || '',
-                previousStateId: evento['extras.#previousStateId'] || '',
-                currentStateName: evento['extras.#currentStateName'] || '',
-                currentStateId: evento['extras.#currentStateId'] || '',
+                // Campos específicos de eventos (desde extras)
+                previousStateName: extras['#previousStateName'] || '',
+                previousStateId: extras['#previousStateId'] || '',
+                currentStateName: extras['#stateName'] || '',
+                currentStateId: extras['#stateId'] || '',
+                stateName: extras['#stateName'] || '',
+                stateId: extras['#stateId'] || '',
+                
+                // Campos adicionales de extras
+                extrasMessageId: extras['#messageId'] || '',
+                extrasStateName: extras['#stateName'] || '',
+                extrasStateId: extras['#stateId'] || '',
                 
                 // Campos de sistema
                 fechaFiltro: obtenerFechaFiltro(evento),
@@ -569,9 +584,11 @@ const procesarEventos = async (jsonData, outputPath) => {
         });
 
         const campos = [
-            'id', 'category', 'action', 'from', 'to',
-            'storageDate', 'timestamp', 'previousStateName', 'previousStateId',
-            'currentStateName', 'currentStateId', 'fechaFiltro', 'tipoDato', 'procesadoEn'
+            'id', 'ownerIdentity', 'identity', 'messageId', 'category', 'action',
+            'contactIdentity', 'storageDate', 'timestamp', 
+            'previousStateName', 'previousStateId', 'currentStateName', 'currentStateId',
+            'stateName', 'stateId', 'extrasMessageId', 'extrasStateName', 'extrasStateId',
+            'fechaFiltro', 'tipoDato', 'procesadoEn'
         ];
         
         const parser = new Parser({ fields: campos, header: true });
@@ -656,6 +673,16 @@ const procesarTickets = async (jsonData, outputPath) => {
  * @returns {string} - Fecha en formato YYYY-MM-DD
  */
 const obtenerFechaFiltro = (obj) => {
+    // Para eventos, priorizar storageDate
+    if (obj.category && obj.action) {
+        if (obj.storageDate) {
+            const fechaMatch = obj.storageDate.match(/^\d{4}-\d{2}-\d{2}/);
+            if (fechaMatch) {
+                return fechaMatch[0];
+            }
+        }
+    }
+    
     // Para tickets, buscar en metadata y content primero
     if (obj.type === 'application/vnd.iris.ticket+json') {
         const metadata = obj.metadata || {};
@@ -713,9 +740,9 @@ const obtenerFechaFiltro = (obj) => {
     
     // Para otros tipos, usar la lógica original
     const fechaFields = [
+        'storageDate',
         'metadata.#envelope.storageDate',
         'metadata.#wa.timestamp',
-        'storageDate',
         '#envelope.storageDate',
         '#wa.timestamp',
         '#date_processed',
