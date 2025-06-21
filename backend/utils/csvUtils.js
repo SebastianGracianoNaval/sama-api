@@ -114,20 +114,18 @@ const convertJsonToCsv = async (jsonData, outputPath) => {
 const fechaEnRango = (fechaStr, fechas) => {
     if (!fechas) return true;
     if (!fechaStr) return false;
-    
-    // Validar que la fecha tenga el formato correcto (yyyy-mm-dd)
-    const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!fechaRegex.test(fechaStr.trim())) {
+
+    // Extraer solo la parte de la fecha si viene en formato ISO o similar
+    const match = fechaStr.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!match) {
         console.log(`[fechaEnRango] Fecha inválida ignorada: '${fechaStr}'`);
         return false;
     }
-    
-    // Tomar solo la parte yyyy-mm-dd de cada fecha
-    const fechaLimpia = fechaStr.trim();
+    const fechaLimpia = match[1];
     const inicio = fechas.fechaInicio;
     const fin = fechas.fechaFin;
     const entra = (fechaLimpia >= inicio && fechaLimpia <= fin);
-    
+
     // Debug
     console.log(`[fechaEnRango] fechaFiltro: '${fechaLimpia}', inicio: '${inicio}', fin: '${fin}', entra: ${entra}`);
     return entra;
