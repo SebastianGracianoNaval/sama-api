@@ -140,16 +140,16 @@ const fechaEnRango = (fechaStr, fechas) => {
  * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
  */
-const consolidarCsvsMejorado = async (directorio, tipo, fechas = null) => {
+const consolidarCsvs = async (directorio, tipo, fechas = null) => {
     const archivos = fs.readdirSync(directorio)
         .filter(archivo => archivo.endsWith('.csv') && !archivo.includes('consolidado'));
     
     if (archivos.length === 0) {
-        console.log(`[consolidarCsvsMejorado] No hay archivos CSV de ${tipo} para consolidar`);
+        console.log(`[consolidarCsvs] No hay archivos CSV de ${tipo} para consolidar`);
         return null;
     }
     
-    console.log(`[consolidarCsvsMejorado] Archivos encontrados para ${tipo}:`, archivos);
+    console.log(`[consolidarCsvs] Archivos encontrados para ${tipo}:`, archivos);
     
     let datosCombinados = [];
     let encabezados = null;
@@ -185,7 +185,7 @@ const consolidarCsvsMejorado = async (directorio, tipo, fechas = null) => {
                         descartadas++;
                     }
                 } catch (error) {
-                    console.warn(`[consolidarCsvsMejorado] Error procesando línea ${i}:`, error.message);
+                    console.warn(`[consolidarCsvs] Error procesando línea ${i}:`, error.message);
                     descartadas++;
                 }
             } else {
@@ -195,10 +195,10 @@ const consolidarCsvsMejorado = async (directorio, tipo, fechas = null) => {
         }
     }
     
-    console.log(`[consolidarCsvsMejorado] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+    console.log(`[consolidarCsvs] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
     
     if (datosCombinados.length <= 1) {
-        console.log('[consolidarCsvsMejorado] No hay datos después del filtrado.');
+        console.log('[consolidarCsvs] No hay datos después del filtrado.');
         return null;
     }
     
@@ -210,7 +210,7 @@ const consolidarCsvsMejorado = async (directorio, tipo, fechas = null) => {
     const rutaConsolidada = path.join(directorio, nombreArchivo);
     
     fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
-    console.log(`[consolidarCsvsMejorado] Archivo consolidado generado: ${rutaConsolidada}`);
+    console.log(`[consolidarCsvs] Archivo consolidado generado: ${rutaConsolidada}`);
     
     return rutaConsolidada;
 };
@@ -683,7 +683,6 @@ const obtenerFechaFiltro = (obj) => {
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
-    consolidarCsvsMejorado,
     flattenObject,
     consolidarTicketsCsvs,
     generarTicketIndividual,

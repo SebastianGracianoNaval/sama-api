@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { convertJsonToCsv } = require('../utils/csvUtils');
-const { generarNombreCsv } = require('../utils/blipUtils');
+const { generarNombreArchivo } = require('../utils/blipUtils');
 
 const reportController = {
     // Obtener lista de reportes disponibles
@@ -139,7 +138,7 @@ const reportController = {
                 });
             }
             // Generar nombre de archivo con el formato correcto
-            const nombreArchivo = generarNombreCsv(tipo);
+            const nombreArchivo = generarNombreArchivo(tipo);
 
             // Guardar reporte consolidado
             const carpetaReportes = path.join(__dirname, '..', 'data', 'reportes');

@@ -3,8 +3,7 @@ const {
     procesarContactos, 
     procesarEventos, 
     procesarTickets,
-    consolidarCsvs, 
-    consolidarCsvsMejorado,
+    consolidarCsvs,
     consolidarTicketsCsvs, 
     generarTicketIndividual 
 } = require('../utils/csvUtils');
@@ -328,7 +327,7 @@ const consolidarTickets = async (req, res) => {
             });
         }
         const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
-        const rutaConsolidada = await consolidarCsvsMejorado(pathCarpeta, tipo, fechas);
+        const rutaConsolidada = await consolidarCsvs(pathCarpeta, tipo, fechas);
         res.status(200).json({
             success: true,
             message: 'Tickets consolidados correctamente',
