@@ -224,7 +224,9 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
 const generarTicketIndividual = (ticketInfo, directorio) => {
     try {
         const ticket = ticketInfo.ticket;
-        const seqId = ticket['content.sequentialId'];
+        const content = ticket.content || {};
+        const metadata = ticket.metadata || {};
+        const seqId = content.sequentialId;
         const contacto = ticketInfo.contacto;
         
         // Ordenar mensajes por fecha
@@ -258,14 +260,14 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         const ticketData = {
             // Campos básicos del ticket
             id: ticket.id || '',
-            sequentialId: ticket['content.sequentialId'] || '',
-            status: ticket['content.status'] || '',
-            team: ticket['content.team'] || '',
-            unreadMessages: ticket['content.unreadMessages'] || '',
+            sequentialId: content.sequentialId || '',
+            status: content.status || '',
+            team: content.team || '',
+            unreadMessages: content.unreadMessages || '',
             
             // Campos de metadatos
-            storageDate: ticket['metadata.#envelope.storageDate'] || ticket.storageDate || '',
-            timestamp: ticket['metadata.#wa.timestamp'] || ticket.timestamp || '',
+            storageDate: metadata['#envelope.storageDate'] || content.storageDate || ticket.storageDate || '',
+            timestamp: metadata['#wa.timestamp'] || ticket.timestamp || '',
             
             // Campos de estado actualizados
             estadoTicket: 'cerrado',
@@ -430,6 +432,9 @@ const procesarMensajes = async (jsonData, outputPath) => {
         const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
         
         const mensajesProcesados = dataArray.map(mensaje => {
+            // Acceder correctamente a los campos anidados
+            const metadata = mensaje.metadata || {};
+            
             // Extraer solo campos relevantes de mensajes
             const mensajeLimpio = {
                 // Campos básicos del mensaje
@@ -439,9 +444,9 @@ const procesarMensajes = async (jsonData, outputPath) => {
                 type: mensaje.type || '',
                 content: mensaje.content || '',
                 
-                // Campos de metadatos
-                storageDate: mensaje['metadata.#envelope.storageDate'] || mensaje.storageDate || '',
-                timestamp: mensaje['metadata.#wa.timestamp'] || mensaje.timestamp || '',
+                // Campos de metadatos - acceder correctamente a los campos anidados
+                storageDate: metadata['#envelope.storageDate'] || mensaje.storageDate || '',
+                timestamp: metadata['#wa.timestamp'] || metadata['#date_processed'] || mensaje.timestamp || '',
                 
                 // Campos de sistema
                 fechaFiltro: obtenerFechaFiltro(mensaje),
@@ -595,17 +600,21 @@ const procesarTickets = async (jsonData, outputPath) => {
         const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
         
         const ticketsProcesados = dataArray.map(ticket => {
+            // Acceder correctamente a los campos anidados
+            const content = ticket.content || {};
+            const metadata = ticket.metadata || {};
+            
             const ticketLimpio = {
                 // Campos básicos del ticket
                 id: ticket.id || '',
-                sequentialId: ticket['content.sequentialId'] || '',
-                status: ticket['content.status'] || '',
-                team: ticket['content.team'] || '',
-                unreadMessages: ticket['content.unreadMessages'] || '',
+                sequentialId: content.sequentialId || '',
+                status: content.status || '',
+                team: content.team || '',
+                unreadMessages: content.unreadMessages || '',
                 
                 // Campos de metadatos
-                storageDate: ticket['metadata.#envelope.storageDate'] || ticket.storageDate || '',
-                timestamp: ticket['metadata.#wa.timestamp'] || ticket.timestamp || '',
+                storageDate: metadata['#envelope.storageDate'] || content.storageDate || ticket.storageDate || '',
+                timestamp: metadata['#wa.timestamp'] || ticket.timestamp || '',
                 
                 // Campos de estado (se actualizarán cuando se cierre)
                 estadoTicket: 'abierto',
@@ -647,6 +656,62 @@ const procesarTickets = async (jsonData, outputPath) => {
  * @returns {string} - Fecha en formato YYYY-MM-DD
  */
 const obtenerFechaFiltro = (obj) => {
+    // Para tickets, buscar en metadata y content primero
+    if (obj.type === 'application/vnd.iris.ticket+json') {
+        const metadata = obj.metadata || {};
+        const content = obj.content || {};
+        
+        // Priorizar metadata.#envelope.storageDate
+        if (metadata['#envelope.storageDate']) {
+            const fechaMatch = metadata['#envelope.storageDate'].match(/^\d{4}-\d{2}-\d{2}/);
+            if (fechaMatch) {
+                return fechaMatch[0];
+            }
+        }
+        
+        // Luego content.storageDate
+        if (content.storageDate) {
+            const fechaMatch = content.storageDate.match(/^\d{4}-\d{2}-\d{2}/);
+            if (fechaMatch) {
+                return fechaMatch[0];
+            }
+        }
+    }
+    
+    // Para mensajes, buscar en metadata primero
+    if (obj.type && obj.type.includes('text/')) {
+        const metadata = obj.metadata || {};
+        
+        // Priorizar metadata.#envelope.storageDate
+        if (metadata['#envelope.storageDate']) {
+            const fechaMatch = metadata['#envelope.storageDate'].match(/^\d{4}-\d{2}-\d{2}/);
+            if (fechaMatch) {
+                return fechaMatch[0];
+            }
+        }
+        
+        // Luego metadata.#date_processed (timestamp)
+        if (metadata['#date_processed']) {
+            try {
+                const fechaObj = new Date(parseInt(metadata['#date_processed']));
+                if (!isNaN(fechaObj.getTime())) {
+                    return fechaObj.toISOString().slice(0, 10);
+                }
+            } catch (e) {}
+        }
+        
+        // Luego metadata.date_created (timestamp)
+        if (metadata['date_created']) {
+            try {
+                const fechaObj = new Date(parseInt(metadata['date_created']));
+                if (!isNaN(fechaObj.getTime())) {
+                    return fechaObj.toISOString().slice(0, 10);
+                }
+            } catch (e) {}
+        }
+    }
+    
+    // Para otros tipos, usar la lógica original
     const fechaFields = [
         'metadata.#envelope.storageDate',
         'metadata.#wa.timestamp',
