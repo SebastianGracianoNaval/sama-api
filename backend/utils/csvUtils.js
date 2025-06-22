@@ -322,7 +322,8 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             // Campo especial para tickets cerrados
             conversacion: conversacion,
             contacto: contacto,
-            agente: ticketInfo.correoAgente || ''
+            agente: ticketInfo.correoAgente || '',
+            duracion: ticketInfo.duracion || ''
         };
 
         // Generar nombre del archivo con el formato ticket_{sequentialId}_{fecha}
@@ -340,7 +341,8 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         const campos = [
             'id', 'sequentialId', 'status', 'team', 'unreadMessages',
             'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre',
-            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente'
+            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente',
+            'duracion'
         ];
         
         const parser = new Parser({ fields: campos, header: true });

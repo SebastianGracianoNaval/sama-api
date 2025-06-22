@@ -101,15 +101,20 @@ const handleWebhook = async (req, res) => {
                 // Si es un ticket de apertura
                 if (tipo === 'ticket' && item['type'] === 'application/vnd.iris.ticket+json') {
                     if (!ticketsAbiertos.has(contacto) || ticketsAbiertos.get(contacto).cerrado) {
+                        const content = item.content || {};
+                        const metadata = item.metadata || {};
+                        const fechaApertura = metadata['#envelope.storageDate'] || content.storageDate || item.storageDate || new Date().toISOString();
+
                         ticketsAbiertos.set(contacto, {
                             ticket: item,
                             mensajes: [],
                             eventos: [],
                             cerrado: false,
                             fechaCierre: null,
+                            fechaApertura: fechaApertura,
                             contacto: contacto
                         });
-                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${item['content.sequentialId']})`);
+                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${item['content.sequentialId']}) con fecha ${fechaApertura}`);
                     }
                 }
 
@@ -365,8 +370,12 @@ const handleBotEvent = async (req, res) => {
                 ticketInfo.cerrado = true;
                 ticketInfo.fechaCierre = eventoBot.timestamp;
                 ticketInfo.correoAgente = correoAgente;
+
+                // Calcular y guardar la duración del ticket
+                const duracion = calcularDuracionTicket(ticketInfo.fechaApertura, ticketInfo.fechaCierre);
+                ticketInfo.duracion = duracion;
                 
-                console.log(`[BotEvent] Ticket cerrado para contacto ${numeroTelefono} por agente ${correoAgente}`);
+                console.log(`[BotEvent] Ticket cerrado para contacto ${numeroTelefono} por agente ${correoAgente}. Duración: ${duracion}`);
                 
                 // Generar archivo individual del ticket con información del agente
                 try {
@@ -449,6 +458,34 @@ const handleBotEvent = async (req, res) => {
         });
     }
 };
+
+/**
+ * Calcula la duración entre dos fechas y la formatea
+ * @param {string} inicio - Fecha de inicio en formato ISO
+ * @param {string} fin - Fecha de fin en formato ISO
+ * @returns {string} - Duración formateada (e.g., "1d 2h 30m 15s")
+ */
+function calcularDuracionTicket(inicio, fin) {
+    if (!inicio || !fin) return '';
+    const fechaInicio = new Date(inicio);
+    const fechaFin = new Date(fin);
+    let diff = fechaFin.getTime() - fechaInicio.getTime();
+
+    if (isNaN(diff) || diff < 0) return '';
+
+    let dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+    diff -= dias * (1000 * 60 * 60 * 24);
+
+    let horas = Math.floor(diff / (1000 * 60 * 60));
+    diff -= horas * (1000 * 60 * 60);
+
+    let mins = Math.floor(diff / (1000 * 60));
+    diff -= mins * (1000 * 60);
+
+    let segs = Math.floor(diff / 1000);
+
+    return `${dias}d ${horas}h ${mins}m ${segs}s`;
+}
 
 module.exports = {
     handleWebhook,
