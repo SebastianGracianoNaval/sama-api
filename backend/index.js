@@ -70,48 +70,69 @@ app.post('/consolidar/:tipo', consolidarArchivos);
 // Rutas para descargar los CSV consolidados con filtro de fechas
 app.get('/descargar/mensajes', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query;
+    console.log(`[DESCARGAR/MENSAJES] Fechas recibidas - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}'`);
+    
     if (fechaInicio && fechaFin) {
+        console.log(`[DESCARGAR/MENSAJES] Validando fechas...`);
         const fechasValidas = validarFechas(fechaInicio, fechaFin);
+        console.log(`[DESCARGAR/MENSAJES] Fechas validadas:`, fechasValidas);
+        
         if (!fechasValidas) {
             return res.status(400).json({
                 success: false,
                 message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
             });
         }
+        console.log(`[DESCARGAR/MENSAJES] Llamando descargarCsvConsolidado con fechas:`, fechasValidas);
         await descargarCsvConsolidado('mensaje', res, fechasValidas);
     } else {
+        console.log(`[DESCARGAR/MENSAJES] Sin fechas, llamando descargarCsvConsolidado sin filtro`);
         await descargarCsvConsolidado('mensaje', res);
     }
 });
 
 app.get('/descargar/contactos', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query;
+    console.log(`[DESCARGAR/CONTACTOS] Fechas recibidas - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}'`);
+    
     if (fechaInicio && fechaFin) {
+        console.log(`[DESCARGAR/CONTACTOS] Validando fechas...`);
         const fechasValidas = validarFechas(fechaInicio, fechaFin);
+        console.log(`[DESCARGAR/CONTACTOS] Fechas validadas:`, fechasValidas);
+        
         if (!fechasValidas) {
             return res.status(400).json({
                 success: false,
                 message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
             });
         }
+        console.log(`[DESCARGAR/CONTACTOS] Llamando descargarCsvConsolidado con fechas:`, fechasValidas);
         await descargarCsvConsolidado('contacto', res, fechasValidas);
     } else {
+        console.log(`[DESCARGAR/CONTACTOS] Sin fechas, llamando descargarCsvConsolidado sin filtro`);
         await descargarCsvConsolidado('contacto', res);
     }
 });
 
 app.get('/descargar/eventos', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query;
+    console.log(`[DESCARGAR/EVENTOS] Fechas recibidas - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}'`);
+    
     if (fechaInicio && fechaFin) {
+        console.log(`[DESCARGAR/EVENTOS] Validando fechas...`);
         const fechasValidas = validarFechas(fechaInicio, fechaFin);
+        console.log(`[DESCARGAR/EVENTOS] Fechas validadas:`, fechasValidas);
+        
         if (!fechasValidas) {
             return res.status(400).json({
                 success: false,
                 message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
             });
         }
+        console.log(`[DESCARGAR/EVENTOS] Llamando descargarCsvConsolidado con fechas:`, fechasValidas);
         await descargarCsvConsolidado('evento', res, fechasValidas);
     } else {
+        console.log(`[DESCARGAR/EVENTOS] Sin fechas, llamando descargarCsvConsolidado sin filtro`);
         await descargarCsvConsolidado('evento', res);
     }
 });
@@ -256,36 +277,53 @@ function validarFechas(fechaInicio, fechaFin) {
 // Función para descargar CSV consolidado
 async function descargarCsvConsolidado(tipo, res, fechas = null) {
     try {
+        console.log(`[descargarCsvConsolidado] Iniciando para tipo: ${tipo}, fechas:`, fechas);
+        
         const carpeta = obtenerRutaCarpeta(tipo);
         if (!carpeta) {
+            console.log(`[descargarCsvConsolidado] No se pudo determinar carpeta para tipo: ${tipo}`);
             return res.status(500).json({
                 success: false,
                 message: 'Error al determinar la carpeta de destino'
             });
         }
+        
         const pathCarpeta = path.join(__dirname, carpeta);
+        console.log(`[descargarCsvConsolidado] Ruta de carpeta: ${pathCarpeta}`);
+        
         if (!fs.existsSync(pathCarpeta)) {
+            console.log(`[descargarCsvConsolidado] Carpeta no existe, creando: ${pathCarpeta}`);
             fs.mkdirSync(pathCarpeta, { recursive: true });
             return res.status(404).json({
                 success: false,
                 message: 'No hay datos disponibles para descargar.'
             });
         }
+        
         let rutaCsv;
         if (tipo === 'ticket') {
+            console.log(`[descargarCsvConsolidado] Llamando consolidarTicketsCsvs con fechas:`, fechas);
             rutaCsv = await consolidarTicketsCsvs(pathCarpeta, fechas);
         } else {
+            console.log(`[descargarCsvConsolidado] Llamando consolidarCsvs con tipo: ${tipo}, fechas:`, fechas);
             rutaCsv = await consolidarCsvs(pathCarpeta, tipo, fechas);
         }
+        
+        console.log(`[descargarCsvConsolidado] Resultado de consolidación:`, rutaCsv);
+        
         if (!rutaCsv) {
+            console.log(`[descargarCsvConsolidado] No se generó archivo consolidado`);
             return res.status(404).json({
                 success: false,
                 message: 'No hay datos disponibles para descargar en el período especificado.'
             });
         }
+        
+        console.log(`[descargarCsvConsolidado] Descargando archivo: ${rutaCsv}`);
         // Descargar el archivo tal cual, el frontend decide el nombre
         res.download(rutaCsv);
     } catch (error) {
+        console.error(`[descargarCsvConsolidado] Error:`, error);
         res.status(500).json({
             success: false,
             message: 'Error al descargar el archivo',

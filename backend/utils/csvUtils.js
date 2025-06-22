@@ -139,6 +139,9 @@ const fechaEnRango = (fechaStr, fechas) => {
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
  */
 const consolidarCsvs = async (directorio, tipo, fechas = null) => {
+    console.log(`[consolidarCsvs] Iniciando consolidación para tipo: ${tipo}, directorio: ${directorio}`);
+    console.log(`[consolidarCsvs] Fechas recibidas:`, fechas);
+    
     const archivos = fs.readdirSync(directorio)
         .filter(archivo => archivo.endsWith('.csv') && !archivo.includes('consolidado'));
     
@@ -166,6 +169,7 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
         
         const columnas = encabezados.split(',').map(col => col.trim());
         const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
+        console.log(`[consolidarCsvs] Índice de fechaFiltro en columnas: ${fechaIndex}`);
         
         for (let i = 1; i < lineas.length; i++) {
             const linea = lineas[i].trim();
@@ -175,12 +179,15 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
                 try {
                     const valores = linea.match(/(?:\"[^\"]*\"|[^,])+/g).map(v => v.trim().replace(/^\"|\"$/g, ''));
                     const fecha = valores[fechaIndex];
+                    console.log(`[consolidarCsvs] Procesando línea ${i}, fechaFiltro: '${fecha}'`);
                     
                     if (fechaEnRango(fecha, fechas)) {
                         incluidas++;
                         datosCombinados.push(linea);
+                        console.log(`[consolidarCsvs] Línea ${i} INCLUIDA`);
                     } else {
                         descartadas++;
+                        console.log(`[consolidarCsvs] Línea ${i} DESCARTADA`);
                     }
                 } catch (error) {
                     console.warn(`[consolidarCsvs] Error procesando línea ${i}:`, error.message);
@@ -345,6 +352,9 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
  */
 const consolidarTicketsCsvs = async (directorio, fechas = null) => {
     try {
+        console.log(`[consolidarTicketsCsvs] Iniciando consolidación de tickets, directorio: ${directorio}`);
+        console.log(`[consolidarTicketsCsvs] Fechas recibidas:`, fechas);
+        
         // Buscar archivos CSV individuales de tickets en la carpeta de reportes
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
@@ -379,6 +389,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             
             const columnas = encabezados.split(',').map(col => col.trim());
             const fechaIndex = columnas.findIndex(col => col === 'fechaCierre');
+            console.log(`[consolidarTicketsCsvs] Índice de fechaCierre en columnas: ${fechaIndex}`);
             
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
@@ -388,12 +399,15 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                     try {
                         const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
                         const fecha = valores[fechaIndex];
+                        console.log(`[consolidarTicketsCsvs] Procesando línea ${i}, fechaCierre: '${fecha}'`);
                         
                         if (fechaEnRango(fecha, fechas)) {
                             incluidas++;
                             datosCombinados.push(linea);
+                            console.log(`[consolidarTicketsCsvs] Línea ${i} INCLUIDA`);
                         } else {
                             descartadas++;
+                            console.log(`[consolidarTicketsCsvs] Línea ${i} DESCARTADA`);
                         }
                     } catch (error) {
                         console.warn(`[consolidarTicketsCsvs] Error procesando línea ${i}:`, error.message);
