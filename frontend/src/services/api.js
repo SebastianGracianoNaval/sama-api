@@ -118,12 +118,12 @@ export const reportService = {
       params: { fechaInicio, fechaFin },
       responseType: 'blob'
     })),
-  downloadCampañas: (fechaInicio, fechaFin, nombrePlantilla) => 
+  downloadCampanas: (fechaInicio, fechaFin, nombrePlantilla) => 
     handleBlobResponse(api.get('/descargar/campanas', { 
       params: { fechaInicio, fechaFin, nombrePlantilla },
       responseType: 'blob'
     })),
-  getCampañasList: () => api.get('/api/campanas'),
+  getCampanasList: () => api.get('/api/campanas'),
   getReportesList: () => api.get('/descargar/reportes'),
   downloadReporte: (filename) => handleBlobResponse(api.get(`/descargar/reportes/${filename}`, { responseType: 'blob' })),
   downloadReporteByType: (tipo, fechaInicio, fechaFin, nombrePlantilla) => 

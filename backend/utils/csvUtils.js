@@ -382,7 +382,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
         
         console.log('[consolidarTicketsCsvs] Archivos de tickets encontrados:', archivos);
-        
+
         if (archivos.length === 0) {
             console.log('[consolidarTicketsCsvs] No hay archivos de tickets para consolidar');
             return null;
@@ -419,7 +419,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                         
                         if (fechaEnRango(fecha, fechas)) {
                             incluidas++;
-                            datosCombinados.push(linea);
+                        datosCombinados.push(linea);
                             console.log(`[consolidarTicketsCsvs] Línea ${i} INCLUIDA`);
                         } else {
                             descartadas++;
@@ -461,32 +461,33 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
 };
 
 /**
- * Consolida archivos CSV de campañas (solo tickets de plantillas)
+ * Consolida archivos CSV de campanas (solo tickets de plantillas)
  * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
  * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
  * @param {string} nombrePlantilla - Nombre específico de plantilla para filtrar (opcional)
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
  */
-const consolidarCampañas = async (directorio, fechas = null, nombrePlantilla = null) => {
+const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = null) => {
     try {
-        console.log(`[consolidarCampañas] Iniciando consolidación de campañas, directorio: ${directorio}`);
-        console.log(`[consolidarCampañas] Fechas recibidas:`, fechas);
-        console.log(`[consolidarCampañas] Nombre de plantilla filtro:`, nombrePlantilla);
+        console.log(`[consolidarCampanas] Iniciando consolidación de campanas, directorio: ${directorio}`);
+        console.log(`[consolidarCampanas] Fechas recibidas:`, fechas);
+        console.log(`[consolidarCampanas] Nombre de plantilla filtro:`, nombrePlantilla);
         
         // Buscar archivos CSV de tickets en la carpeta de reportes
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
-            console.log('[consolidarCampañas] No existe carpeta de reportes');
+            console.log('[consolidarCampanas] No existe carpeta de reportes, creando...');
+            fs.mkdirSync(carpetaReportes, { recursive: true });
             return null;
         }
 
         const archivos = fs.readdirSync(carpetaReportes)
             .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
 
-        console.log('[consolidarCampañas] Archivos de tickets encontrados:', archivos);
+        console.log('[consolidarCampanas] Archivos de tickets encontrados:', archivos);
 
         if (archivos.length === 0) {
-            console.log('[consolidarCampañas] No hay archivos de tickets para consolidar');
+            console.log('[consolidarCampanas] No hay archivos de tickets para consolidar');
             return null;
         }
 
@@ -510,7 +511,7 @@ const consolidarCampañas = async (directorio, fechas = null, nombrePlantilla = 
             const origenIndex = columnas.findIndex(col => col === 'origen');
             const nombrePlantillaIndex = columnas.findIndex(col => col === 'nombrePlantilla');
             
-            console.log(`[consolidarCampañas] Índices - fechaCierre: ${fechaIndex}, origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
+            console.log(`[consolidarCampanas] Índices - fechaCierre: ${fechaIndex}, origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
             
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
@@ -522,16 +523,16 @@ const consolidarCampañas = async (directorio, fechas = null, nombrePlantilla = 
                     // Verificar que sea un ticket de plantilla
                     if (origenIndex !== -1 && valores[origenIndex] !== 'plantilla') {
                         descartadas++;
-                        console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - no es de plantilla`);
+                        console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - no es de plantilla`);
                         continue;
                     }
                     
-                    // Filtrar por nombre de campaña si se especifica
+                    // Filtrar por nombre de campana si se especifica
                     if (nombrePlantilla && nombrePlantillaIndex !== -1) {
                         const nombrePlantillaCsv = valores[nombrePlantillaIndex];
                         if (nombrePlantillaCsv !== nombrePlantilla) {
                             descartadas++;
-                            console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - plantilla no coincide: ${nombrePlantillaCsv} vs ${nombrePlantilla}`);
+                            console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - plantilla no coincide: ${nombrePlantillaCsv} vs ${nombrePlantilla}`);
                             continue;
                         }
                     }
@@ -539,31 +540,31 @@ const consolidarCampañas = async (directorio, fechas = null, nombrePlantilla = 
                     // Filtrar por fechas si se especifican
                     if (fechas && fechaIndex !== -1) {
                         const fecha = valores[fechaIndex];
-                        console.log(`[consolidarCampañas] Procesando línea ${i}, fechaCierre: '${fecha}'`);
+                        console.log(`[consolidarCampanas] Procesando línea ${i}, fechaCierre: '${fecha}'`);
                         
                         if (fechaEnRango(fecha, fechas)) {
                             incluidas++;
                             datosCombinados.push(linea);
-                            console.log(`[consolidarCampañas] Línea ${i} INCLUIDA`);
+                            console.log(`[consolidarCampanas] Línea ${i} INCLUIDA`);
                         } else {
                             descartadas++;
-                            console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - fecha fuera de rango`);
+                            console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - fecha fuera de rango`);
                         }
                     } else {
                         datosCombinados.push(linea);
                         incluidas++;
                     }
                 } catch (error) {
-                    console.warn(`[consolidarCampañas] Error procesando línea ${i}:`, error.message);
+                    console.warn(`[consolidarCampanas] Error procesando línea ${i}:`, error.message);
                     descartadas++;
                 }
             }
         }
 
-        console.log(`[consolidarCampañas] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+        console.log(`[consolidarCampanas] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
         
         if (datosCombinados.length <= 1) {
-            console.log('[consolidarCampañas] No hay datos después del filtrado.');
+            console.log('[consolidarCampanas] No hay datos después del filtrado.');
             return null;
         }
 
@@ -577,42 +578,43 @@ const consolidarCampañas = async (directorio, fechas = null, nombrePlantilla = 
         const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
         
         fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
-        console.log('[consolidarCampañas] Archivo consolidado generado:', rutaConsolidada);
+        console.log('[consolidarCampanas] Archivo consolidado generado:', rutaConsolidada);
         
         return rutaConsolidada;
     } catch (error) {
-        console.error('[consolidarCampañas] Error:', error);
+        console.error('[consolidarCampanas] Error:', error);
         throw error;
     }
 };
 
 /**
- * Obtiene la lista de campañas disponibles para filtrado
+ * Obtiene la lista de campanas disponibles para filtrado
  * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
- * @returns {Array} - Lista de nombres de campañas únicos
+ * @returns {Array} - Lista de nombres de campanas únicos
  */
-const obtenerCampañasDisponibles = (directorio) => {
+const obtenerCampanasDisponibles = (directorio) => {
     try {
-        console.log(`[obtenerCampañasDisponibles] Buscando campañas en directorio: ${directorio}`);
+        console.log(`[obtenerCampanasDisponibles] Buscando campanas en directorio: ${directorio}`);
         
         // Buscar archivos CSV de tickets en la carpeta de reportes
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
-            console.log('[obtenerCampañasDisponibles] No existe carpeta de reportes');
+            console.log('[obtenerCampanasDisponibles] No existe carpeta de reportes, creando...');
+            fs.mkdirSync(carpetaReportes, { recursive: true });
             return [];
         }
 
         const archivos = fs.readdirSync(carpetaReportes)
             .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
 
-        console.log('[obtenerCampañasDisponibles] Archivos de tickets encontrados:', archivos);
+        console.log('[obtenerCampanasDisponibles] Archivos de tickets encontrados:', archivos);
 
         if (archivos.length === 0) {
-            console.log('[obtenerCampañasDisponibles] No hay archivos de tickets');
+            console.log('[obtenerCampanasDisponibles] No hay archivos de tickets');
             return [];
         }
 
-        const campañas = new Set();
+        const campanas = new Set();
 
         for (const archivo of archivos) {
             const rutaArchivo = path.join(carpetaReportes, archivo);
@@ -626,7 +628,7 @@ const obtenerCampañasDisponibles = (directorio) => {
             const origenIndex = columnas.findIndex(col => col === 'origen');
             const nombrePlantillaIndex = columnas.findIndex(col => col === 'nombrePlantilla');
             
-            console.log(`[obtenerCampañasDisponibles] Índices - origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
+            console.log(`[obtenerCampanasDisponibles] Índices - origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
             
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
@@ -641,24 +643,24 @@ const obtenerCampañasDisponibles = (directorio) => {
                         if (nombrePlantillaIndex !== -1 && valores[nombrePlantillaIndex]) {
                             const nombrePlantilla = valores[nombrePlantillaIndex];
                             if (nombrePlantilla && nombrePlantilla !== '') {
-                                campañas.add(nombrePlantilla);
-                                console.log(`[obtenerCampañasDisponibles] Campaña encontrada: ${nombrePlantilla}`);
+                                campanas.add(nombrePlantilla);
+                                console.log(`[obtenerCampanasDisponibles] Campana encontrada: ${nombrePlantilla}`);
                             }
                         }
                     }
                 } catch (error) {
-                    console.warn(`[obtenerCampañasDisponibles] Error procesando línea ${i}:`, error.message);
+                    console.warn(`[obtenerCampanasDisponibles] Error procesando línea ${i}:`, error.message);
                 }
             }
         }
 
-        const listaCampañas = Array.from(campañas).sort();
-        console.log(`[obtenerCampañasDisponibles] Total campañas encontradas: ${listaCampañas.length}`);
-        console.log(`[obtenerCampañasDisponibles] Lista de campañas:`, listaCampañas);
+        const listaCampanas = Array.from(campanas).sort();
+        console.log(`[obtenerCampanasDisponibles] Total campanas encontradas: ${listaCampanas.length}`);
+        console.log(`[obtenerCampanasDisponibles] Lista de campanas:`, listaCampanas);
         
-        return listaCampañas;
+        return listaCampanas;
     } catch (error) {
-        console.error('[obtenerCampañasDisponibles] Error:', error);
+        console.error('[obtenerCampanasDisponibles] Error:', error);
         return [];
     }
 };
@@ -1139,6 +1141,6 @@ module.exports = {
     procesarEventos,
     procesarTickets,
     procesarPlantillas,
-    consolidarCampañas,
-    obtenerCampañasDisponibles
+    consolidarCampanas,
+    obtenerCampanasDisponibles
 }; 

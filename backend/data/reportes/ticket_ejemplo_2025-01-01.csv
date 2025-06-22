@@ -1,0 +1,3 @@
+id,sequentialId,status,team,unreadMessages,storageDate,timestamp,estadoTicket,fechaCierre,tipoCierre,origen,nombrePlantilla,campaignId,campaignName,fechaFiltro,tipoDato,procesadoEn,conversacion,contacto,agente,duracion
+ticket_001,67,closed,team1,0,2025-01-01T10:00:00Z,2025-01-01T10:00:00Z,cerrado,2025-01-01T12:00:00Z,resuelto,plantilla,Campaña de Bienvenida,campaign_123,Campaña de Bienvenida,2025-01-01,ticket,2025-01-01T12:00:00Z,"[cliente]: Hola
+[agente]: Bienvenido a nuestra empresa",5512345678,agente@empresa.com,2h 0m 0s 

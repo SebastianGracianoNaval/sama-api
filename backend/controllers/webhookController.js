@@ -6,8 +6,8 @@ const {
     procesarPlantillas,
     consolidarCsvs,
     consolidarTicketsCsvs, 
-    consolidarCampañas,
-    obtenerCampañasDisponibles,
+    consolidarCampanas,
+    obtenerCampanasDisponibles,
     generarTicketIndividual 
 } = require('../utils/csvUtils');
 const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo, extraerInfoPlantilla } = require('../utils/blipUtils');

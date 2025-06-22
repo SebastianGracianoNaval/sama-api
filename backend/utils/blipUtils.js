@@ -156,7 +156,7 @@ const obtenerRutaCarpeta = (tipo) => {
         contacto: 'data/contactos',
         ticket: 'data/tickets',
         plantilla: 'data/plantillas',
-        campaña: 'data/campañas'
+        campana: 'data/campanas'
     };
     return rutas[tipo] || null;
 };

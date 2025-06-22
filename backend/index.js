@@ -10,7 +10,7 @@ const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson, generarNombreArchivo } = require('./utils/blipUtils');
-const { consolidarCsvs, consolidarTicketsCsvs } = require('./utils/csvUtils');
+const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
 
 // Crear una aplicación Express
@@ -391,31 +391,31 @@ app.get('/descargar/tickets', async (req, res) => {
     }
 });
 
-// Nueva ruta para obtener lista de campañas disponibles
-app.get('/api/campañas', async (req, res) => {
+// Nueva ruta para obtener lista de campanas disponibles
+app.get('/api/campanas', async (req, res) => {
     try {
-        console.log('[API/CAMPAÑAS] Obteniendo lista de campañas disponibles');
+        console.log('[API/CAMPANAS] Obteniendo lista de campanas disponibles');
         const carpeta = obtenerRutaCarpeta('ticket');
         const pathCarpeta = path.join(__dirname, carpeta);
         
-        const campañas = obtenerCampañasDisponibles(pathCarpeta);
+        const campanas = obtenerCampanasDisponibles(pathCarpeta);
         
         res.json({
             success: true,
-            campañas: campañas,
-            total: campañas.length
+            campanas: campanas,
+            total: campanas.length
         });
     } catch (error) {
-        console.error('[API/CAMPAÑAS] Error:', error);
+        console.error('[API/CAMPANAS] Error:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al obtener la lista de campañas',
+            message: 'Error al obtener la lista de campanas',
             error: error.message
         });
     }
 });
 
-// Nueva ruta para descargar campañas
+// Nueva ruta para descargar campanas
 app.get('/descargar/campanas', async (req, res) => {
     const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
     console.log(`[DESCARGAR/CAMPANAS] Parámetros - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}', nombrePlantilla: '${nombrePlantilla}'`);
@@ -443,12 +443,12 @@ app.get('/descargar/campanas', async (req, res) => {
             });
         }
         
-        const rutaCsv = await consolidarCampañas(pathCarpeta, fechasValidas, nombrePlantilla);
+        const rutaCsv = await consolidarCampanas(pathCarpeta, fechasValidas, nombrePlantilla);
         
         if (!rutaCsv) {
             return res.status(404).json({
                 success: false,
-                message: 'No hay datos de campañas disponibles para descargar en el período especificado.'
+                message: 'No hay datos de campanas disponibles para descargar en el período especificado.'
             });
         }
         
@@ -458,7 +458,7 @@ app.get('/descargar/campanas', async (req, res) => {
         console.error(`[DESCARGAR/CAMPANAS] Error:`, error);
         res.status(500).json({
             success: false,
-            message: 'Error al descargar las campañas',
+            message: 'Error al descargar las campanas',
             error: error.message
         });
     }
