@@ -17,7 +17,7 @@ const fs = require('fs');
 
 // Mapa para rastrear interacciones de campañas antes de que se cree un ticket
 // Clave: contactIdentity (ej. '5491169007611@wa.gw.msging.net')
-// Valor: { templateName, originator, sentTime, replied, replyContent, replyTime, templateContent }
+// Valor: { templateName, originator, sentTime, replied, replyContent, replyTime, templateContent, campaignId }
 const campaignTracking = new Map();
 
 // Mapa para mantener tickets abiertos por contacto
@@ -47,19 +47,27 @@ const handleWebhook = async (req, res) => {
         const tipo = identificarTipoJson(jsonData);
         console.log('[Webhook] Tipo identificado:', tipo);
         
-        // --- LÓGICA DE TRACKING DE CAMPAÑAS ---
+        // --- LÓGICA MEJORADA DE TRACKING DE CAMPAÑAS ---
         if (tipo === 'plantilla') {
             const templateName = jsonData.content?.template?.name;
             const to = jsonData.to;
-            // Si es un mensaje de plantilla enviado a un usuario, registrar la hora de envío
+            const metadata = jsonData.metadata || {};
+            
+            // Si es un mensaje de plantilla enviado a un usuario, registrar la información
             if (templateName && to && to.endsWith('@wa.gw.msging.net')) {
                 const contactId = to;
                 const campaign = campaignTracking.get(contactId) || {};
-                campaign.sentTime = jsonData.metadata?.['#envelope.storageDate'] || new Date().toISOString();
+                campaign.sentTime = metadata['#envelope.storageDate'] || new Date().toISOString();
                 campaign.templateName = templateName;
                 campaign.templateContent = jsonData.content?.templateContent?.components?.find(c => c.type === 'BODY')?.text || '';
+                campaign.campaignId = metadata['#activecampaign.flowId'] || '';
+                campaign.campaignName = metadata['#activecampaign.name'] || '';
                 campaignTracking.set(contactId, campaign);
-                console.log(`[CampaignTracking] Registrada hora de envío de plantilla para ${contactId}`);
+                console.log(`[CampaignTracking] Registrada plantilla para ${contactId}:`, {
+                    templateName: campaign.templateName,
+                    sentTime: campaign.sentTime,
+                    campaignId: campaign.campaignId
+                });
             }
         } else if (tipo === 'contacto') {
             // Si es una actualización de contacto con info de campaña, registrar emisor
@@ -68,8 +76,13 @@ const handleWebhook = async (req, res) => {
                 const campaign = campaignTracking.get(contactId) || {};
                 campaign.originator = jsonData.extras.campaignOriginator || '';
                 campaign.templateName = jsonData.extras.campaignMessageTemplate;
+                campaign.campaignId = jsonData.extras.campaignId || '';
                 campaignTracking.set(contactId, campaign);
-                console.log(`[CampaignTracking] Registrado emisor de campaña para ${contactId}`);
+                console.log(`[CampaignTracking] Registrado emisor de campaña para ${contactId}:`, {
+                    originator: campaign.originator,
+                    templateName: campaign.templateName,
+                    campaignId: campaign.campaignId
+                });
             }
         } else if (tipo === 'mensaje') {
             const contactId = jsonData.from;
@@ -80,7 +93,10 @@ const handleWebhook = async (req, res) => {
                     campaign.replied = true;
                     campaign.replyContent = jsonData.content || '';
                     campaign.replyTime = jsonData.metadata?.['#envelope.storageDate'] || new Date().toISOString();
-                    console.log(`[CampaignTracking] Registrada respuesta a campaña para ${contactId}`);
+                    console.log(`[CampaignTracking] Registrada respuesta a campaña para ${contactId}:`, {
+                        replyContent: campaign.replyContent,
+                        replyTime: campaign.replyTime
+                    });
                 }
             }
         }
@@ -122,7 +138,7 @@ const handleWebhook = async (req, res) => {
                 throw new Error(`Tipo no soportado: ${tipo}`);
         }
 
-        // --- LÓGICA ESPECIAL PARA TICKETS (tracking de conversaciones) ---
+        // --- LÓGICA MEJORADA PARA TICKETS (tracking de conversaciones) ---
         if (tipo === 'ticket' || tipo === 'mensaje') {
             // Función para extraer el número de teléfono del contacto
             const extraerContacto = (obj) => {
@@ -156,10 +172,38 @@ const handleWebhook = async (req, res) => {
                         const metadata = item.metadata || {};
                         const fechaApertura = metadata['#envelope.storageDate'] || content.storageDate || item.storageDate || new Date().toISOString();
 
-                        // Determinar si es un ticket de campaña y qué tipo
+                        // MEJORADA: Determinar si es un ticket de campaña usando múltiples criterios
                         const campaignDetails = campaignTracking.get(contacto);
-                        const ticketType = campaignDetails ? 'PLANTILLA' : 'BOT';
+                        let ticketType = 'BOT';
+                        
+                        // Criterio 1: Si hay tracking de campaña para este contacto
+                        if (campaignDetails && campaignDetails.templateName) {
+                            ticketType = 'PLANTILLA';
+                        }
+                        // Criterio 2: Si el ticket tiene CampaignId en el content
+                        else if (content.CampaignId) {
+                            ticketType = 'PLANTILLA';
+                            // Si no teníamos tracking, crear uno básico
+                            if (!campaignDetails) {
+                                campaignTracking.set(contacto, {
+                                    templateName: 'Plantilla sin nombre',
+                                    originator: '',
+                                    sentTime: fechaApertura,
+                                    replied: false,
+                                    replyContent: '',
+                                    replyTime: '',
+                                    templateContent: '',
+                                    campaignId: content.CampaignId
+                                });
+                            }
+                        }
+                        // Criterio 3: Si el ticket tiene metadata de ActiveCampaign
+                        else if (metadata['#activecampaign.flowId'] || metadata['#activecampaign.name']) {
+                            ticketType = 'PLANTILLA';
+                        }
 
+                        const finalCampaignDetails = campaignTracking.get(contacto);
+                        
                         ticketsAbiertos.set(contacto, {
                             ticket: item,
                             mensajes: [],
@@ -169,12 +213,18 @@ const handleWebhook = async (req, res) => {
                             fechaApertura: fechaApertura,
                             contacto: contacto,
                             tipo: ticketType,
-                            campaignDetails: campaignDetails || null,
+                            campaignDetails: finalCampaignDetails || null,
                         });
-                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${content.sequentialId}) - Tipo: ${ticketType}`);
+                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${content.sequentialId}) - Tipo: ${ticketType}`, {
+                            campaignDetails: finalCampaignDetails ? {
+                                templateName: finalCampaignDetails.templateName,
+                                originator: finalCampaignDetails.originator,
+                                campaignId: finalCampaignDetails.campaignId
+                            } : null
+                        });
                         
                         // Una vez que el ticket se abre, podemos limpiar el tracking para este contacto
-                        if (campaignDetails) {
+                        if (finalCampaignDetails) {
                             campaignTracking.delete(contacto);
                         }
                     }
@@ -571,5 +621,6 @@ module.exports = {
     handleWebhook,
     consolidarArchivos,
     consolidarTickets,
-    handleBotEvent
+    handleBotEvent,
+    ticketsAbiertos
 }; 

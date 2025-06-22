@@ -322,6 +322,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
                 'plantilla', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
             ];
         } else { // BOT
+            // Asegurar que los tickets BOT tengan todos los campos requeridos
             campos = [
                 'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
@@ -344,6 +345,15 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         fs.writeFileSync(rutaArchivo, csv);
         
         console.log(`[generarTicketIndividual] Archivo de reporte generado: ${nombreArchivo} (Tipo: ${tipoTicket})`);
+        console.log(`[generarTicketIndividual] Campos generados:`, campos);
+        console.log(`[generarTicketIndividual] Datos del ticket:`, {
+            id: ticketData.id,
+            sequentialId: ticketData.sequentialId,
+            tipo: ticketData.TIPO,
+            plantilla: ticketData.plantilla || 'N/A',
+            respuesta: ticketData.respuesta || 'N/A',
+            emisor: ticketData.emisor || 'N/A'
+        });
         return rutaArchivo;
     } catch (error) {
         console.error('[generarTicketIndividual] Error:', error);
@@ -379,8 +389,9 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             return null;
         }
 
-        let datosCombinados = [];
-        let encabezados = null;
+        // Separar tickets por tipo
+        let ticketsBot = [];
+        let ticketsPlantilla = [];
         let incluidas = 0;
         let descartadas = 0;
 
@@ -389,62 +400,111 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
             const lineas = contenido.split('\n');
             
-            if (!encabezados) {
-                encabezados = lineas[0];
-                datosCombinados.push(encabezados);
-            }
+            if (lineas.length < 2) continue; // Saltar archivos vacíos
             
+            const encabezados = lineas[0];
             const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
             const fechaIndex = columnas.findIndex(col => col === 'fechaCierre');
-            console.log(`[consolidarTicketsCsvs] Índice de fechaCierre en columnas: ${fechaIndex}`);
+            const tipoIndex = columnas.findIndex(col => col === 'TIPO');
+            
+            console.log(`[consolidarTicketsCsvs] Procesando archivo: ${archivo}`);
+            console.log(`[consolidarTicketsCsvs] Índices - fechaCierre: ${fechaIndex}, TIPO: ${tipoIndex}`);
             
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
                 if (!linea) continue;
                 
-                if (fechas && fechaIndex !== -1) {
-                    try {
-                        const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                try {
+                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                    
+                    // Filtrar por fechas si se especifican
+                    if (fechas && fechaIndex !== -1) {
                         const fecha = valores[fechaIndex];
                         console.log(`[consolidarTicketsCsvs] Procesando línea ${i}, fechaCierre: '${fecha}'`);
                         
-                        if (fechaEnRango(fecha, fechas)) {
-                            incluidas++;
-                        datosCombinados.push(linea);
-                            console.log(`[consolidarTicketsCsvs] Línea ${i} INCLUIDA`);
-                        } else {
+                        if (!fechaEnRango(fecha, fechas)) {
                             descartadas++;
-                            console.log(`[consolidarTicketsCsvs] Línea ${i} DESCARTADA`);
+                            console.log(`[consolidarTicketsCsvs] Línea ${i} DESCARTADA - fecha fuera de rango`);
+                            continue;
                         }
-                    } catch (error) {
-                        console.warn(`[consolidarTicketsCsvs] Error procesando línea ${i}:`, error.message);
-                        descartadas++;
                     }
-                } else {
-                    datosCombinados.push(linea);
+                    
+                    // Determinar tipo de ticket
+                    let tipoTicket = 'BOT';
+                    if (tipoIndex !== -1) {
+                        tipoTicket = valores[tipoIndex] || 'BOT';
+                    }
+                    
+                    // Separar por tipo
+                    if (tipoTicket === 'PLANTILLA') {
+                        ticketsPlantilla.push(linea);
+                    } else {
+                        ticketsBot.push(linea);
+                    }
                     incluidas++;
+                    console.log(`[consolidarTicketsCsvs] Línea ${i} INCLUIDA - Tipo: ${tipoTicket}`);
+                    
+                } catch (error) {
+                    console.warn(`[consolidarTicketsCsvs] Error procesando línea ${i}:`, error.message);
+                    descartadas++;
                 }
             }
         }
 
         console.log(`[consolidarTicketsCsvs] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+        console.log(`[consolidarTicketsCsvs] Tickets BOT: ${ticketsBot.length}, Tickets PLANTILLA: ${ticketsPlantilla.length}`);
         
-        if (datosCombinados.length <= 1) {
+        if (incluidas === 0) {
             console.log('[consolidarTicketsCsvs] No hay datos después del filtrado.');
             return null;
         }
 
-        // Generar archivo consolidado
+        // Generar archivos consolidados separados
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
-        const nombreArchivo = `tickets_consolidado_${hora}_${fecha}.csv`;
-        const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
         
-        fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
-        console.log('[consolidarTicketsCsvs] Archivo consolidado generado:', rutaConsolidada);
+        let archivosGenerados = [];
         
-        return rutaConsolidada;
+        // Generar archivo consolidado de tickets BOT
+        if (ticketsBot.length > 0) {
+            const nombreArchivoBot = `tickets_bot_consolidado_${hora}_${fecha}.csv`;
+            const rutaConsolidadaBot = path.join(carpetaReportes, nombreArchivoBot);
+            
+            // Agregar encabezados para tickets BOT
+            const encabezadosBot = [
+                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
+                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
+                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO'
+            ].join(',');
+            
+            const contenidoBot = [encabezadosBot, ...ticketsBot].join('\n');
+            fs.writeFileSync(rutaConsolidadaBot, contenidoBot);
+            archivosGenerados.push(rutaConsolidadaBot);
+            console.log(`[consolidarTicketsCsvs] Archivo consolidado BOT generado: ${rutaConsolidadaBot}`);
+        }
+        
+        // Generar archivo consolidado de tickets PLANTILLA
+        if (ticketsPlantilla.length > 0) {
+            const nombreArchivoPlantilla = `tickets_plantilla_consolidado_${hora}_${fecha}.csv`;
+            const rutaConsolidadaPlantilla = path.join(carpetaReportes, nombreArchivoPlantilla);
+            
+            // Agregar encabezados para tickets PLANTILLA
+            const encabezadosPlantilla = [
+                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
+                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
+                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
+                'plantilla', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+            ].join(',');
+            
+            const contenidoPlantilla = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
+            fs.writeFileSync(rutaConsolidadaPlantilla, contenidoPlantilla);
+            archivosGenerados.push(rutaConsolidadaPlantilla);
+            console.log(`[consolidarTicketsCsvs] Archivo consolidado PLANTILLA generado: ${rutaConsolidadaPlantilla}`);
+        }
+        
+        // Retornar la ruta del primer archivo generado (para compatibilidad)
+        return archivosGenerados.length > 0 ? archivosGenerados[0] : null;
     } catch (error) {
         console.error('[consolidarTicketsCsvs] Error:', error);
         throw error;
@@ -482,8 +542,7 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
             return null;
         }
 
-        let datosCombinados = [];
-        let encabezados = null;
+        let ticketsPlantilla = [];
         let incluidas = 0;
         let descartadas = 0;
 
@@ -492,17 +551,16 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
             const lineas = contenido.split('\n');
             
-            if (!encabezados) {
-                encabezados = lineas[0];
-                datosCombinados.push(encabezados);
-            }
+            if (lineas.length < 2) continue; // Saltar archivos vacíos
             
+            const encabezados = lineas[0];
             const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
             const fechaIndex = columnas.findIndex(col => col === 'fechaCierre');
-            const origenIndex = columnas.findIndex(col => col === 'origen');
-            const nombrePlantillaIndex = columnas.findIndex(col => col === 'nombrePlantilla');
+            const tipoIndex = columnas.findIndex(col => col === 'TIPO');
+            const plantillaIndex = columnas.findIndex(col => col === 'plantilla');
             
-            console.log(`[consolidarCampanas] Índices - fechaCierre: ${fechaIndex}, origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
+            console.log(`[consolidarCampanas] Procesando archivo: ${archivo}`);
+            console.log(`[consolidarCampanas] Índices - fechaCierre: ${fechaIndex}, TIPO: ${tipoIndex}, plantilla: ${plantillaIndex}`);
             
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
@@ -512,15 +570,18 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
                     const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
                     
                     // Verificar que sea un ticket de plantilla
-                    if (origenIndex !== -1 && valores[origenIndex] !== 'plantilla') {
-                        descartadas++;
-                        console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - no es de plantilla`);
-                        continue;
+                    if (tipoIndex !== -1) {
+                        const tipoTicket = valores[tipoIndex];
+                        if (tipoTicket !== 'PLANTILLA') {
+                            descartadas++;
+                            console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - no es de plantilla (tipo: ${tipoTicket})`);
+                            continue;
+                        }
                     }
                     
-                    // Filtrar por nombre de campana si se especifica
-                    if (nombrePlantilla && nombrePlantillaIndex !== -1) {
-                        const nombrePlantillaCsv = valores[nombrePlantillaIndex];
+                    // Filtrar por nombre de plantilla si se especifica
+                    if (nombrePlantilla && plantillaIndex !== -1) {
+                        const nombrePlantillaCsv = valores[plantillaIndex];
                         if (nombrePlantillaCsv !== nombrePlantilla) {
                             descartadas++;
                             console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - plantilla no coincide: ${nombrePlantillaCsv} vs ${nombrePlantilla}`);
@@ -533,18 +594,17 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
                         const fecha = valores[fechaIndex];
                         console.log(`[consolidarCampanas] Procesando línea ${i}, fechaCierre: '${fecha}'`);
                         
-                        if (fechaEnRango(fecha, fechas)) {
-                            incluidas++;
-                            datosCombinados.push(linea);
-                            console.log(`[consolidarCampanas] Línea ${i} INCLUIDA`);
-                        } else {
+                        if (!fechaEnRango(fecha, fechas)) {
                             descartadas++;
                             console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - fecha fuera de rango`);
+                            continue;
                         }
-                    } else {
-                        datosCombinados.push(linea);
-                        incluidas++;
                     }
+                    
+                    ticketsPlantilla.push(linea);
+                    incluidas++;
+                    console.log(`[consolidarCampanas] Línea ${i} INCLUIDA`);
+                    
                 } catch (error) {
                     console.warn(`[consolidarCampanas] Error procesando línea ${i}:`, error.message);
                     descartadas++;
@@ -554,7 +614,7 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
 
         console.log(`[consolidarCampanas] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
         
-        if (datosCombinados.length <= 1) {
+        if (incluidas === 0) {
             console.log('[consolidarCampanas] No hay datos después del filtrado.');
             return null;
         }
@@ -568,7 +628,16 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
             : `campanas_consolidado_${hora}_${fecha}.csv`;
         const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
         
-        fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
+        // Agregar encabezados para tickets de plantilla
+        const encabezadosPlantilla = [
+            'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
+            'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
+            'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
+            'plantilla', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+        ].join(',');
+        
+        const contenidoFinal = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
+        fs.writeFileSync(rutaConsolidada, contenidoFinal);
         console.log('[consolidarCampanas] Archivo consolidado generado:', rutaConsolidada);
         
         return rutaConsolidada;

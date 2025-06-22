@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
-const { handleWebhook, consolidarArchivos } = require('./controllers/webhookController');
+const { handleWebhook, consolidarArchivos, ticketsAbiertos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson, generarNombreArchivo } = require('./utils/blipUtils');
 const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
@@ -403,26 +403,42 @@ const getAllTicketReports = (fechas) => {
 app.get('/descargar/tickets', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query;
     try {
+        console.log(`[DESCARGAR/TICKETS] Fechas recibidas - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}'`);
+        
         const fechas = (fechaInicio && fechaFin) ? validarFechas(fechaInicio, fechaFin) : null;
         if ((fechaInicio && fechaFin) && !fechas) {
             return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
         }
 
-        const todosLosTickets = getAllTicketReports(fechas);
+        // Usar la nueva función de consolidación que genera archivos separados
+        const carpeta = obtenerRutaCarpeta('ticket');
+        const pathCarpeta = path.join(__dirname, carpeta);
+        
+        if (!fs.existsSync(pathCarpeta)) {
+            fs.mkdirSync(pathCarpeta, { recursive: true });
+            return res.status(404).json({ success: false, message: 'No hay datos de tickets disponibles.' });
+        }
 
-        if (todosLosTickets.length === 0) {
+        // Llamar a la función de consolidación que genera archivos separados
+        const rutaConsolidada = await consolidarTicketsCsvs(pathCarpeta, fechas);
+        
+        if (!rutaConsolidada) {
             return res.status(404).json({ success: false, message: 'No hay tickets para exportar en el período especificado.' });
         }
 
-        const ticketsBot = todosLosTickets.filter(t => t.TIPO === 'BOT');
-        const ticketsPlantilla = todosLosTickets.filter(t => t.TIPO === 'PLANTILLA');
+        // Buscar los archivos consolidados generados
+        const carpetaReportes = path.join(__dirname, 'data', 'reportes');
+        const archivosConsolidados = fs.readdirSync(carpetaReportes)
+            .filter(archivo => archivo.includes('consolidado') && archivo.includes(new Date().toISOString().slice(0, 10).replace(/-/g, '')))
+            .sort((a, b) => fs.statSync(path.join(carpetaReportes, b)).mtime.getTime() - fs.statSync(path.join(carpetaReportes, a)).mtime.getTime());
 
-        const botParser = new Parser({ fields: Object.keys(ticketsBot[0] || {}) });
-        const plantillaParser = new Parser({ fields: Object.keys(ticketsPlantilla[0] || {}) });
-        
-        const csvBot = ticketsBot.length > 0 ? botParser.parse(ticketsBot) : "";
-        const csvPlantilla = ticketsPlantilla.length > 0 ? plantillaParser.parse(ticketsPlantilla) : "";
+        console.log(`[DESCARGAR/TICKETS] Archivos consolidados encontrados:`, archivosConsolidados);
 
+        if (archivosConsolidados.length === 0) {
+            return res.status(404).json({ success: false, message: 'No se encontraron archivos consolidados de tickets.' });
+        }
+
+        // Crear ZIP con los archivos consolidados
         const archive = archiver('zip', { zlib: { level: 9 } });
         
         const zipName = `reporte_tickets_${new Date().toISOString().slice(0,10)}.zip`;
@@ -430,8 +446,17 @@ app.get('/descargar/tickets', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
 
         archive.pipe(res);
-        if (csvBot) archive.append(csvBot, { name: 'tickets_bot.csv' });
-        if (csvPlantilla) archive.append(csvPlantilla, { name: 'tickets_plantilla.csv' });
+        
+        // Agregar archivos al ZIP
+        for (const archivo of archivosConsolidados) {
+            const rutaArchivo = path.join(carpetaReportes, archivo);
+            const nombreEnZip = archivo.includes('bot') ? 'tickets_bot.csv' : 
+                               archivo.includes('plantilla') ? 'tickets_plantilla.csv' : archivo;
+            
+            console.log(`[DESCARGAR/TICKETS] Agregando al ZIP: ${archivo} como ${nombreEnZip}`);
+            archive.file(rutaArchivo, { name: nombreEnZip });
+        }
+        
         archive.finalize();
 
     } catch (error) {
@@ -466,34 +491,116 @@ app.get('/api/campanas', async (req, res) => {
 app.get('/descargar/campanas', async (req, res) => {
     const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
     try {
+        console.log(`[DESCARGAR/CAMPANAS] Fechas recibidas - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}', nombrePlantilla: '${nombrePlantilla}'`);
+        
         const fechas = (fechaInicio && fechaFin) ? validarFechas(fechaInicio, fechaFin) : null;
         if ((fechaInicio && fechaFin) && !fechas) {
             return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
         }
         
-        let ticketsPlantilla = getAllTicketReports(fechas).filter(t => t.TIPO === 'PLANTILLA');
-
-        if (nombrePlantilla) {
-            ticketsPlantilla = ticketsPlantilla.filter(t => t.plantilla === nombrePlantilla);
+        // Usar la nueva función de consolidación que solo incluye tickets de plantilla
+        const carpeta = obtenerRutaCarpeta('ticket');
+        const pathCarpeta = path.join(__dirname, carpeta);
+        
+        if (!fs.existsSync(pathCarpeta)) {
+            fs.mkdirSync(pathCarpeta, { recursive: true });
+            return res.status(404).json({ success: false, message: 'No hay datos de tickets disponibles.' });
         }
 
-        if (ticketsPlantilla.length === 0) {
+        // Llamar a la función de consolidación de campanas
+        const rutaConsolidada = await consolidarCampanas(pathCarpeta, fechas, nombrePlantilla);
+        
+        if (!rutaConsolidada) {
             return res.status(404).json({ success: false, message: 'No hay datos de campañas para los filtros seleccionados.' });
         }
 
-        const parser = new Parser();
-        const csvFinal = parser.parse(ticketsPlantilla);
-        
-        const nombreArchivo = `reporte_campanas_${new Date().toISOString().slice(0,10)}.csv`;
+        // Descargar el archivo consolidado
+        const nombreArchivo = path.basename(rutaConsolidada);
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
-        res.send(csvFinal);
+        res.download(rutaConsolidada);
 
     } catch (error) {
         console.error(`[DESCARGAR/CAMPANAS] Error:`, error);
         res.status(500).json({
             success: false,
             message: 'Error al descargar las campanas',
+            error: error.message
+        });
+    }
+});
+
+// NUEVA RUTA: Para forzar la identificación de tipo de ticket
+app.post('/api/identificar-ticket', async (req, res) => {
+    try {
+        const { ticketId, esPlantilla, campaignDetails } = req.body;
+        
+        console.log('[IDENTIFICAR-TICKET] Datos recibidos:', JSON.stringify(req.body, null, 2));
+        
+        if (!ticketId) {
+            return res.status(400).json({
+                success: false,
+                message: 'ticketId es requerido'
+            });
+        }
+        
+        // Buscar el ticket en los tickets abiertos
+        let ticketEncontrado = null;
+        let contactoEncontrado = null;
+        
+        for (const [contacto, ticketInfo] of ticketsAbiertos.entries()) {
+            if (ticketInfo.ticket.id === ticketId || ticketInfo.ticket.content?.sequentialId?.toString() === ticketId.toString()) {
+                ticketEncontrado = ticketInfo;
+                contactoEncontrado = contacto;
+                break;
+            }
+        }
+        
+        if (!ticketEncontrado) {
+            return res.status(404).json({
+                success: false,
+                message: 'Ticket no encontrado'
+            });
+        }
+        
+        // Actualizar el tipo de ticket según el parámetro recibido
+        if (esPlantilla !== undefined) {
+            const nuevoTipo = esPlantilla ? 'PLANTILLA' : 'BOT';
+            ticketEncontrado.tipo = nuevoTipo;
+            
+            // Si es plantilla y se proporcionan detalles de campaña, actualizarlos
+            if (esPlantilla && campaignDetails) {
+                ticketEncontrado.campaignDetails = {
+                    ...ticketEncontrado.campaignDetails,
+                    ...campaignDetails
+                };
+            }
+            
+            console.log(`[IDENTIFICAR-TICKET] Ticket ${ticketId} actualizado a tipo: ${nuevoTipo}`);
+            
+            res.json({
+                success: true,
+                message: `Ticket ${ticketId} identificado como ${nuevoTipo}`,
+                ticketId: ticketId,
+                tipo: nuevoTipo,
+                contacto: contactoEncontrado
+            });
+        } else {
+            res.json({
+                success: true,
+                message: 'Información del ticket',
+                ticketId: ticketId,
+                tipo: ticketEncontrado.tipo,
+                contacto: contactoEncontrado,
+                campaignDetails: ticketEncontrado.campaignDetails
+            });
+        }
+        
+    } catch (error) {
+        console.error('[IDENTIFICAR-TICKET] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al identificar el ticket',
             error: error.message
         });
     }
