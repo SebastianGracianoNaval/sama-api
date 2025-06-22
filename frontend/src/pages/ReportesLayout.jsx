@@ -13,7 +13,7 @@ const drawerWidth = 220;
 
 const reportTypes = [
   { label: 'Tickets', icon: <AssignmentIcon /> },
-  { label: 'Plantillas', icon: <DescriptionIcon /> },
+  { label: 'Campañas', icon: <DescriptionIcon /> },
 ];
 
 const ReportesLayout = () => {
@@ -24,6 +24,7 @@ const ReportesLayout = () => {
   const [downloading, setDownloading] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
+  const [nombrePlantilla, setNombrePlantilla] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -87,12 +88,12 @@ const ReportesLayout = () => {
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
         filename = `tickets_${hora}_${fecha}.csv`;
-      } else if (selected === 'Plantillas') {
-        response = await reportService.downloadReporteByType('plantillas', fechaInicio, fechaFin);
+      } else if (selected === 'Campañas') {
+        response = await reportService.downloadReporteByType('plantillas', fechaInicio, fechaFin, nombrePlantilla);
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
-        filename = `plantillas_${hora}_${fecha}.csv`;
+        filename = `campañas_${hora}_${fecha}.csv`;
       }
       saveAs(new Blob([response.data]), filename);
     } catch (error) {
@@ -175,7 +176,7 @@ const ReportesLayout = () => {
         <Box sx={{ mb: 3, display: selected ? 'block' : 'none' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0, mb: 1, pb: 1, borderBottom: theme => `1.5px solid ${theme.palette.mode === 'dark' ? '#23272F' : '#e0e0e0'}` }}>
             {selected === 'Tickets' && <AssignmentIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
-            {selected === 'Plantillas' && <DescriptionIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
+            {selected === 'Campañas' && <DescriptionIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
             <Typography
               variant="h4"
               fontWeight={700}
@@ -186,11 +187,11 @@ const ReportesLayout = () => {
                 mb: 0,
               }}
             >
-              {selected === 'Tickets' ? 'Tus tickets' : selected === 'Plantillas' ? 'Tus plantillas' : ''}
+              {selected === 'Tickets' ? 'Tus tickets' : selected === 'Campañas' ? 'Tus campañas' : ''}
             </Typography>
           </Box>
           <Typography variant="subtitle1" sx={{ color: theme => theme.palette.mode === 'dark' ? '#B0B0B0' : '#666', mb: 2, ml: 0, pl: 0, textAlign: 'left' }}>
-            {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : selected === 'Plantillas' ? 'Descargá tus plantillas filtrando por fecha.' : ''}
+            {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : selected === 'Campañas' ? 'Descargá tus campañas y plantillas filtrando por fecha y nombre.' : ''}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <TextField
@@ -200,7 +201,12 @@ const ReportesLayout = () => {
               onChange={e => setFechaInicio(e.target.value)}
               InputLabelProps={{ shrink: true }}
               size="small"
-              sx={{ minWidth: 140 }}
+              sx={{ 
+                minWidth: 140,
+                '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+                    filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
+                }
+              }}
               inputProps={{ max: new Date().toISOString().slice(0, 10) }}
             />
             <TextField
@@ -210,9 +216,24 @@ const ReportesLayout = () => {
               onChange={e => setFechaFin(e.target.value)}
               InputLabelProps={{ shrink: true }}
               size="small"
-              sx={{ minWidth: 140 }}
+              sx={{ 
+                minWidth: 140,
+                '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+                    filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
+                }
+              }}
               inputProps={{ max: new Date().toISOString().slice(0, 10) }}
             />
+            {selected === 'Campañas' && (
+              <TextField
+                label="Nombre de Plantilla"
+                variant="outlined"
+                size="small"
+                value={nombrePlantilla}
+                onChange={(e) => setNombrePlantilla(e.target.value)}
+                sx={{ minWidth: 200 }}
+              />
+            )}
             <Button
               variant="outlined"
               color="secondary"

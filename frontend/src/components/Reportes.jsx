@@ -97,6 +97,11 @@ const Reportes = () => {
             InputLabelProps={{ shrink: true }}
             fullWidth
             inputProps={{ max: new Date().toISOString().slice(0, 10) }}
+            sx={theme => ({
+              '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+                  filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
+              }
+            })}
           />
           <TextField
             label="Fecha fin"
@@ -106,12 +111,17 @@ const Reportes = () => {
             InputLabelProps={{ shrink: true }}
             fullWidth
             inputProps={{ max: new Date().toISOString().slice(0, 10) }}
+            sx={theme => ({
+              '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+                  filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
+              }
+            })}
           />
           <Button 
             variant="outlined" 
             startIcon={<ClearIcon />}
             onClick={limpiarFechas}
-            sx={{ minWidth: '100px', borderColor: theme => theme.palette.mode === 'dark' ? '#666' : '#bbb', color: theme => theme.palette.mode === 'dark' ? '#bbb' : '#666', '&:hover': { borderColor: theme => theme.palette.mode === 'dark' ? '#aaa' : '#888', background: theme => theme.palette.mode === 'dark' ? '#222' : '#eee' } }}
+            sx={theme => ({ minWidth: '100px', borderColor: theme.palette.mode === 'dark' ? '#666' : '#bbb', color: theme.palette.mode === 'dark' ? '#bbb' : '#666', '&:hover': { borderColor: theme.palette.mode === 'dark' ? '#aaa' : '#888', background: theme.palette.mode === 'dark' ? '#222' : '#eee' } })}
           >
             LIMPIAR
           </Button>

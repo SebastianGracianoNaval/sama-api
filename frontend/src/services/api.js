@@ -120,9 +120,9 @@ export const reportService = {
     })),
   getReportesList: () => api.get('/descargar/reportes'),
   downloadReporte: (filename) => handleBlobResponse(api.get(`/descargar/reportes/${filename}`, { responseType: 'blob' })),
-  downloadReporteByType: (tipo, fechaInicio, fechaFin) => 
+  downloadReporteByType: (tipo, fechaInicio, fechaFin, nombrePlantilla) => 
     handleBlobResponse(api.get(`/descargar/${tipo}`, {
-      params: { fechaInicio, fechaFin },
+      params: { fechaInicio, fechaFin, nombrePlantilla },
       responseType: 'blob'
     })),
 };

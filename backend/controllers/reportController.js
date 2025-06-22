@@ -57,9 +57,9 @@ const reportController = {
     downloadReporteByType: async (req, res) => {
         try {
             const { tipo } = req.params;
-            const { fechaInicio, fechaFin } = req.query;
+            const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
             console.log(`[ReportController] Generando reporte de tipo: ${tipo}`);
-            console.log(`[ReportController] Filtros - Inicio: ${fechaInicio}, Fin: ${fechaFin}`);
+            console.log(`[ReportController] Filtros - Inicio: ${fechaInicio}, Fin: ${fechaFin}, Plantilla: ${nombrePlantilla}`);
             // Validar fechas
             if ((fechaInicio && !fechaFin) || (!fechaInicio && fechaFin)) {
                 return res.status(400).json({
