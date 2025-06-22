@@ -399,7 +399,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 datosCombinados.push(encabezados);
             }
             
-            const columnas = encabezados.split(',').map(col => col.trim());
+            const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
             const fechaIndex = columnas.findIndex(col => col === 'fechaCierre');
             console.log(`[consolidarTicketsCsvs] Índice de fechaCierre en columnas: ${fechaIndex}`);
             
