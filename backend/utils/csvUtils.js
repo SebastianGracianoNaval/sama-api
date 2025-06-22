@@ -234,7 +234,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             return fa - fb;
         });
 
-        // Crear conversación (solo una vez, sin duplicados)
+        // Crear conversación con formato [agente]: y [cliente]:
         const mensajesUnicos = [];
         const mensajesVistos = new Set();
         
@@ -251,7 +251,31 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
 
         const conversacion = mensajesUnicos.map(m => {
             const fecha = m['metadata.#envelope.storageDate'] || m['storageDate'] || m['fechaFiltro'] || '';
-            return `[${fecha}] ${m.content || ''}`;
+            const contenido = m.content || '';
+            const from = m.from || '';
+            const to = m.to || '';
+            
+            // Determinar si es agente o cliente basándose en from/to
+            let emisor = 'desconocido';
+            
+            // Si el contacto está en "to", entonces el mensaje es del agente
+            if (to.includes(contacto) || to.endsWith('@wa.gw.msging.net')) {
+                emisor = 'agente';
+            }
+            // Si el contacto está en "from", entonces el mensaje es del cliente
+            else if (from.includes(contacto) || from.endsWith('@wa.gw.msging.net')) {
+                emisor = 'cliente';
+            }
+            // Verificar si es un mensaje del agente (tiene metadata específica)
+            else if (m.metadata && m.metadata['#messageEmitter'] === 'Human') {
+                emisor = 'agente';
+            }
+            // Verificar si es un mensaje del bot (tiene from que termina en @msging.net)
+            else if (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) {
+                emisor = 'agente';
+            }
+            
+            return `[${emisor}]: ${contenido}`;
         }).join('\n');
 
         // Preparar datos del ticket con estructura limpia
