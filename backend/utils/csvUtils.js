@@ -167,19 +167,31 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
             datosCombinados.push(encabezados);
         }
         
-        const columnas = encabezados.split(',').map(col => col.trim());
+        const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
         const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
+        const storageDateIndex = columnas.findIndex(col => col === 'storageDate');
         console.log(`[consolidarCsvs] Índice de fechaFiltro en columnas: ${fechaIndex}`);
+        console.log(`[consolidarCsvs] Índice de storageDate en columnas: ${storageDateIndex}`);
+        
+        // Usar fechaFiltro si existe, sino usar storageDate como fallback
+        const campoFechaIndex = fechaIndex !== -1 ? fechaIndex : storageDateIndex;
+        const campoFechaNombre = fechaIndex !== -1 ? 'fechaFiltro' : 'storageDate';
+        
+        if (campoFechaIndex === -1) {
+            console.log(`[consolidarCsvs] No se encontró campo de fecha para filtrar`);
+        } else {
+            console.log(`[consolidarCsvs] Usando campo '${campoFechaNombre}' en índice ${campoFechaIndex} para filtrado`);
+        }
         
         for (let i = 1; i < lineas.length; i++) {
             const linea = lineas[i].trim();
             if (!linea) continue;
             
-            if (fechas && fechaIndex !== -1) {
+            if (fechas && campoFechaIndex !== -1) {
                 try {
                     const valores = linea.match(/(?:\"[^\"]*\"|[^,])+/g).map(v => v.trim().replace(/^\"|\"$/g, ''));
-                    const fecha = valores[fechaIndex];
-                    console.log(`[consolidarCsvs] Procesando línea ${i}, fechaFiltro: '${fecha}'`);
+                    const fecha = valores[campoFechaIndex];
+                    console.log(`[consolidarCsvs] Procesando línea ${i}, ${campoFechaNombre}: '${fecha}'`);
                     
                     if (fechaEnRango(fecha, fechas)) {
                         incluidas++;
