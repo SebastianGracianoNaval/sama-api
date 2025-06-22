@@ -9,6 +9,8 @@ const {
 } = require('../utils/csvUtils');
 const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo, detectarCierreTicket } = require('../utils/blipUtils');
 const path = require('path');
+const { Parser } = require('json2csv');
+const fs = require('fs');
 
 // Mapa global para mantener tickets abiertos por contacto
 const ticketsAbiertos = new Map();
@@ -343,8 +345,142 @@ const consolidarTickets = async (req, res) => {
     }
 };
 
+/**
+ * Maneja eventos específicos del bot de WhatsApp (finalización de tickets, etc.)
+ * @param {Object} req - Objeto de solicitud Express
+ * @param {Object} res - Objeto de respuesta Express
+ */
+const handleBotEvent = async (req, res) => {
+    try {
+        const { correoAgente, ticketFinalizo, identity, tipoEvento = 'finalizacion_ticket' } = req.body;
+        
+        console.log('[BotEvent] Datos recibidos:', JSON.stringify(req.body, null, 2));
+        
+        // Validar datos requeridos
+        if (!correoAgente || !identity) {
+            return res.status(400).json({
+                success: false,
+                message: 'correoAgente e identity son requeridos'
+            });
+        }
+        
+        // Extraer número de teléfono del identity
+        const numeroTelefono = identity.replace('@wa.gw.msging.net', '');
+        
+        // Crear evento del bot con estructura consistente
+        const eventoBot = {
+            id: `bot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            correoAgente,
+            identity,
+            numeroTelefono,
+            ticketFinalizo: ticketFinalizo === 'true' || ticketFinalizo === true,
+            tipoEvento,
+            timestamp: new Date().toISOString(),
+            procesadoEn: new Date().toISOString(),
+            // Campos adicionales para compatibilidad con el sistema existente
+            storageDate: new Date().toISOString(),
+            fechaFiltro: new Date().toISOString().slice(0, 10),
+            tipoDato: 'evento_bot'
+        };
+        
+        console.log('[BotEvent] Evento procesado:', eventoBot);
+        
+        // Si es finalización de ticket, buscar el ticket abierto correspondiente
+        if (eventoBot.ticketFinalizo) {
+            const ticketInfo = ticketsAbiertos.get(numeroTelefono);
+            if (ticketInfo && !ticketInfo.cerrado) {
+                // Marcar ticket como cerrado
+                ticketInfo.cerrado = true;
+                ticketInfo.fechaCierre = eventoBot.timestamp;
+                ticketInfo.correoAgente = correoAgente;
+                
+                console.log(`[BotEvent] Ticket cerrado para contacto ${numeroTelefono} por agente ${correoAgente}`);
+                
+                // Generar archivo individual del ticket con información del agente
+                try {
+                    const carpeta = obtenerRutaCarpeta('ticket');
+                    const rutaCarpeta = path.join(__dirname, '..', carpeta);
+                    
+                    // Agregar información del agente al ticket
+                    ticketInfo.agente = correoAgente;
+                    ticketInfo.fechaCierre = eventoBot.timestamp;
+                    
+                    generarTicketIndividual(ticketInfo, rutaCarpeta);
+                    console.log(`[BotEvent] Archivo individual generado para contacto ${numeroTelefono}`);
+                } catch (error) {
+                    console.error(`[BotEvent] Error al generar archivo individual para contacto ${numeroTelefono}:`, error);
+                }
+            } else {
+                console.log(`[BotEvent] No se encontró ticket abierto para contacto ${numeroTelefono}`);
+            }
+        }
+        
+        // Guardar evento del bot en CSV
+        try {
+            const carpeta = obtenerRutaCarpeta('evento');
+            const nombreArchivo = generarNombreArchivo('evento_bot');
+            const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
+            
+            // Crear CSV con el evento del bot
+            const campos = [
+                'id', 'correoAgente', 'identity', 'numeroTelefono', 'ticketFinalizo',
+                'tipoEvento', 'timestamp', 'procesadoEn', 'storageDate', 'fechaFiltro', 'tipoDato'
+            ];
+            
+            const parser = new Parser({ fields: campos, header: true });
+            const csv = parser.parse([eventoBot]);
+            
+            // Asegurar directorio
+            const dir = path.dirname(outputPath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            
+            fs.writeFileSync(outputPath, csv);
+            console.log(`[BotEvent] Evento guardado en: ${outputPath}`);
+            
+        } catch (error) {
+            console.error('[BotEvent] Error al guardar evento:', error);
+        }
+        
+        // IMPORTANTE: Guardar en el array de webhooks para que aparezca en el frontend
+        // Necesitamos acceder al array webhooksRecibidos desde index.js
+        // Esto se manejará en la ruta del index.js
+        
+        res.status(200).json({
+            success: true,
+            message: 'Evento del bot procesado correctamente',
+            eventoId: eventoBot.id,
+            ticketFinalizo: eventoBot.ticketFinalizo,
+            contacto: numeroTelefono,
+            // Incluir datos para el frontend
+            webhookData: {
+                fecha: new Date().toISOString(),
+                tipo: 'BOT EVENT',
+                body: {
+                    correoAgente: eventoBot.correoAgente,
+                    identity: eventoBot.identity,
+                    ticketFinalizo: eventoBot.ticketFinalizo,
+                    tipoEvento: eventoBot.tipoEvento,
+                    timestamp: eventoBot.timestamp,
+                    numeroTelefono: eventoBot.numeroTelefono
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('[BotEvent] Error procesando evento del bot:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al procesar el evento del bot',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     handleWebhook,
     consolidarArchivos,
-    consolidarTickets
+    consolidarTickets,
+    handleBotEvent
 }; 

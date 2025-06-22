@@ -64,6 +64,38 @@ app.post('/webhook', (req, res) => {
     handleWebhook(req, res);
 });
 
+// NUEVA RUTA: Para eventos específicos del bot de WhatsApp
+app.post('/api/bot-event', async (req, res) => {
+    try {
+        const { handleBotEvent } = require('./controllers/webhookController');
+        
+        // Crear una respuesta personalizada para capturar los datos
+        const originalJson = res.json;
+        let responseData = null;
+        
+        res.json = function(data) {
+            responseData = data;
+            return originalJson.call(this, data);
+        };
+        
+        await handleBotEvent(req, res);
+        
+        // Si la respuesta fue exitosa, guardar en webhooksRecibidos
+        if (responseData && responseData.success && responseData.webhookData) {
+            webhooksRecibidos.push(responseData.webhookData);
+            console.log('[BotEvent] Evento agregado a webhooksRecibidos:', responseData.webhookData);
+        }
+        
+    } catch (error) {
+        console.error('Error en ruta bot-event:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: error.message
+        });
+    }
+});
+
 // Ruta para consolidar archivos CSV por tipo
 app.post('/consolidar/:tipo', consolidarArchivos);
 
