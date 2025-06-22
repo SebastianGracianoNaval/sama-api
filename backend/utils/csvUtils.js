@@ -464,14 +464,14 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
  * Consolida archivos CSV de campañas (solo tickets de plantillas)
  * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
  * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
- * @param {string} nombreCampaña - Nombre específico de campaña para filtrar (opcional)
+ * @param {string} nombrePlantilla - Nombre específico de plantilla para filtrar (opcional)
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
  */
-const consolidarCampañas = async (directorio, fechas = null, nombreCampaña = null) => {
+const consolidarCampañas = async (directorio, fechas = null, nombrePlantilla = null) => {
     try {
         console.log(`[consolidarCampañas] Iniciando consolidación de campañas, directorio: ${directorio}`);
         console.log(`[consolidarCampañas] Fechas recibidas:`, fechas);
-        console.log(`[consolidarCampañas] Nombre de campaña filtro:`, nombreCampaña);
+        console.log(`[consolidarCampañas] Nombre de plantilla filtro:`, nombrePlantilla);
         
         // Buscar archivos CSV de tickets en la carpeta de reportes
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
@@ -527,11 +527,11 @@ const consolidarCampañas = async (directorio, fechas = null, nombreCampaña = n
                     }
                     
                     // Filtrar por nombre de campaña si se especifica
-                    if (nombreCampaña && nombrePlantillaIndex !== -1) {
-                        const nombrePlantilla = valores[nombrePlantillaIndex];
-                        if (nombrePlantilla !== nombreCampaña) {
+                    if (nombrePlantilla && nombrePlantillaIndex !== -1) {
+                        const nombrePlantillaCsv = valores[nombrePlantillaIndex];
+                        if (nombrePlantillaCsv !== nombrePlantilla) {
                             descartadas++;
-                            console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - campaña no coincide: ${nombrePlantilla} vs ${nombreCampaña}`);
+                            console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - plantilla no coincide: ${nombrePlantillaCsv} vs ${nombrePlantilla}`);
                             continue;
                         }
                     }
@@ -571,9 +571,9 @@ const consolidarCampañas = async (directorio, fechas = null, nombreCampaña = n
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
-        const nombreArchivo = nombreCampaña 
-            ? `campaña_${nombreCampaña}_${hora}_${fecha}.csv`
-            : `campañas_consolidado_${hora}_${fecha}.csv`;
+        const nombreArchivo = nombrePlantilla 
+            ? `campana_${nombrePlantilla}_${hora}_${fecha}.csv`
+            : `campanas_consolidado_${hora}_${fecha}.csv`;
         const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
         
         fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));

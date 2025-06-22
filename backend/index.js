@@ -416,9 +416,9 @@ app.get('/api/campañas', async (req, res) => {
 });
 
 // Nueva ruta para descargar campañas
-app.get('/descargar/campañas', async (req, res) => {
-    const { fechaInicio, fechaFin, nombreCampaña } = req.query;
-    console.log(`[DESCARGAR/CAMPAÑAS] Parámetros - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}', nombreCampaña: '${nombreCampaña}'`);
+app.get('/descargar/campanas', async (req, res) => {
+    const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
+    console.log(`[DESCARGAR/CAMPANAS] Parámetros - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}', nombrePlantilla: '${nombrePlantilla}'`);
     
     try {
         let fechasValidas = null;
@@ -443,7 +443,7 @@ app.get('/descargar/campañas', async (req, res) => {
             });
         }
         
-        const rutaCsv = await consolidarCampañas(pathCarpeta, fechasValidas, nombreCampaña);
+        const rutaCsv = await consolidarCampañas(pathCarpeta, fechasValidas, nombrePlantilla);
         
         if (!rutaCsv) {
             return res.status(404).json({
@@ -452,10 +452,10 @@ app.get('/descargar/campañas', async (req, res) => {
             });
         }
         
-        console.log(`[DESCARGAR/CAMPAÑAS] Descargando archivo: ${rutaCsv}`);
+        console.log(`[DESCARGAR/CAMPANAS] Descargando archivo: ${rutaCsv}`);
         res.download(rutaCsv);
     } catch (error) {
-        console.error(`[DESCARGAR/CAMPAÑAS] Error:`, error);
+        console.error(`[DESCARGAR/CAMPANAS] Error:`, error);
         res.status(500).json({
             success: false,
             message: 'Error al descargar las campañas',

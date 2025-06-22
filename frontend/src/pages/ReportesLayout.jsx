@@ -123,7 +123,7 @@ const ReportesLayout = () => {
       } else if (selected === 'Campañas') {
         response = await reportService.downloadCampañas(fechaInicio, fechaFin, nombrePlantilla);
         filename = nombrePlantilla 
-          ? `campana_${nombrePlantilla}_${hora}_${fecha}.csv`
+          ? `campana_${nombrePlantilla.replace(/ /g, '_')}_${hora}_${fecha}.csv`
           : `campanas_consolidadas_${hora}_${fecha}.csv`;
       }
       

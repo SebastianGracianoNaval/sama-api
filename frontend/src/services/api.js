@@ -118,9 +118,9 @@ export const reportService = {
       params: { fechaInicio, fechaFin },
       responseType: 'blob'
     })),
-  downloadCampañas: (fechaInicio, fechaFin, nombreCampaña) => 
+  downloadCampañas: (fechaInicio, fechaFin, nombrePlantilla) => 
     handleBlobResponse(api.get('/descargar/campanas', { 
-      params: { fechaInicio, fechaFin, nombreCampaña },
+      params: { fechaInicio, fechaFin, nombrePlantilla },
       responseType: 'blob'
     })),
   getCampañasList: () => api.get('/api/campanas'),
