@@ -37,6 +37,14 @@ const identificarTipoJson = (jsonData) => {
     if ('lastMessageDate' in jsonData) {
         return 'contacto';
     }
+    // 👥 Contactos con información de campaña (extras con campaignOriginator)
+    if (jsonData.extras && jsonData.extras.campaignOriginator) {
+        return 'contacto';
+    }
+    // 👥 Contactos con identity y phoneNumber
+    if (jsonData.identity && jsonData.phoneNumber) {
+        return 'contacto';
+    }
     // Si no coincide con ninguna, devolver 'desconocido'
     return 'desconocido';
 };

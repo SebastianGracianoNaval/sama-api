@@ -308,9 +308,27 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         // --- Añadir campos específicos y definir columnas ---
         if (tipoTicket === 'PLANTILLA') {
             const details = ticketInfo.campaignDetails || {};
+            
+            // Usar el nombre real de la plantilla
             ticketData.plantilla = details.templateName || '';
-            ticketData.respuesta = details.replied ? 'TRUE' : 'FALSE';
-            ticketData.contenido = details.replyContent || '';
+            
+            // Determinar si hubo respuesta: si hay mensajes del cliente O si se generó un ticket (que implica respuesta)
+            const tieneRespuestaCliente = ticketInfo.mensajes.some(m => 
+                m.from && m.from.endsWith('@wa.gw.msging.net')
+            );
+            const huboRespuesta = tieneRespuestaCliente || ticketInfo.mensajes.length > 0;
+            ticketData.respuesta = huboRespuesta ? 'TRUE' : 'FALSE';
+            
+            // Usar el contenido de respuesta del cliente si existe, sino usar el contenido de la plantilla con variables
+            if (huboRespuesta && details.replyContent) {
+                ticketData.contenido = details.replyContent;
+            } else if (details.templateContentWithParams) {
+                ticketData.contenido = details.templateContentWithParams;
+            } else {
+                ticketData.contenido = details.templateContent || '';
+            }
+            
+            // Usar el emisor real de la campaña
             ticketData.emisor = details.originator || '';
             ticketData.hora_envio = details.sentTime || '';
             ticketData.primer_contacto = primerContacto;
@@ -354,6 +372,22 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             respuesta: ticketData.respuesta || 'N/A',
             emisor: ticketData.emisor || 'N/A'
         });
+        
+        // Logs adicionales para debugging de plantillas
+        if (tipoTicket === 'PLANTILLA') {
+            const details = ticketInfo.campaignDetails || {};
+            console.log(`[generarTicketIndividual] Detalles de campaña:`, {
+                templateName: details.templateName,
+                originator: details.originator,
+                templateContent: details.templateContent,
+                templateContentWithParams: details.templateContentWithParams,
+                replyContent: details.replyContent,
+                replied: details.replied,
+                mensajesCount: ticketInfo.mensajes.length,
+                tieneRespuestaCliente: ticketInfo.mensajes.some(m => m.from && m.from.endsWith('@wa.gw.msging.net'))
+            });
+        }
+        
         return rutaArchivo;
     } catch (error) {
         console.error('[generarTicketIndividual] Error:', error);

@@ -17,13 +17,31 @@ const fs = require('fs');
 
 // Mapa para rastrear interacciones de campañas antes de que se cree un ticket
 // Clave: contactIdentity (ej. '5491169007611@wa.gw.msging.net')
-// Valor: { templateName, originator, sentTime, replied, replyContent, replyTime, templateContent, campaignId }
+// Valor: { templateName, originator, sentTime, replied, replyContent, replyTime, templateContent, campaignId, templateParameters }
 const campaignTracking = new Map();
 
 // Mapa para mantener tickets abiertos por contacto
 // Clave: contactIdentity
 // Valor: { ticket, mensajes, eventos, cerrado, fechaApertura, tipo, campaignDetails }
 const ticketsAbiertos = new Map();
+
+/**
+ * Construye el contenido de la plantilla reemplazando las variables
+ * @param {string} templateText - Texto de la plantilla con placeholders {{1}}, {{2}}, etc.
+ * @param {Array} parameters - Array de parámetros para reemplazar
+ * @returns {string} - Contenido de la plantilla con variables reemplazadas
+ */
+const construirContenidoPlantilla = (templateText, parameters) => {
+    if (!templateText || !parameters) return templateText;
+    
+    let contenido = templateText;
+    parameters.forEach((param, index) => {
+        const placeholder = `{{${index + 1}}}`;
+        contenido = contenido.replace(new RegExp(placeholder, 'g'), param.text || param);
+    });
+    
+    return contenido;
+};
 
 /**
  * Maneja las solicitudes POST del webhook
@@ -57,16 +75,27 @@ const handleWebhook = async (req, res) => {
             if (templateName && to && to.endsWith('@wa.gw.msging.net')) {
                 const contactId = to;
                 const campaign = campaignTracking.get(contactId) || {};
+                
+                // Extraer información de la plantilla
+                const templateContent = jsonData.content?.templateContent?.components?.find(c => c.type === 'BODY')?.text || '';
+                const templateParameters = jsonData.content?.template?.components?.find(c => c.type === 'body')?.parameters || [];
+                
                 campaign.sentTime = metadata['#envelope.storageDate'] || new Date().toISOString();
                 campaign.templateName = templateName;
-                campaign.templateContent = jsonData.content?.templateContent?.components?.find(c => c.type === 'BODY')?.text || '';
+                campaign.templateContent = templateContent;
+                campaign.templateParameters = templateParameters;
                 campaign.campaignId = metadata['#activecampaign.flowId'] || '';
                 campaign.campaignName = metadata['#activecampaign.name'] || '';
+                
+                // Construir contenido con variables reemplazadas
+                campaign.templateContentWithParams = construirContenidoPlantilla(templateContent, templateParameters);
+                
                 campaignTracking.set(contactId, campaign);
                 console.log(`[CampaignTracking] Registrada plantilla para ${contactId}:`, {
                     templateName: campaign.templateName,
                     sentTime: campaign.sentTime,
-                    campaignId: campaign.campaignId
+                    campaignId: campaign.campaignId,
+                    templateContentWithParams: campaign.templateContentWithParams
                 });
             }
         } else if (tipo === 'contacto') {
@@ -74,14 +103,31 @@ const handleWebhook = async (req, res) => {
             if (jsonData.extras?.campaignMessageTemplate) {
                 const contactId = jsonData.identity;
                 const campaign = campaignTracking.get(contactId) || {};
+                
+                // Actualizar con información del emisor
                 campaign.originator = jsonData.extras.campaignOriginator || '';
                 campaign.templateName = jsonData.extras.campaignMessageTemplate;
                 campaign.campaignId = jsonData.extras.campaignId || '';
+                
+                // Si ya tenemos contenido de plantilla, construir con parámetros de extras
+                if (campaign.templateContent && jsonData.extras) {
+                    const parameters = [];
+                    // Extraer parámetros de extras (0, 1, 2, etc.)
+                    for (let i = 0; i < 10; i++) {
+                        if (jsonData.extras[i.toString()] !== undefined) {
+                            parameters.push({ text: jsonData.extras[i.toString()] });
+                        }
+                    }
+                    campaign.templateParameters = parameters;
+                    campaign.templateContentWithParams = construirContenidoPlantilla(campaign.templateContent, parameters);
+                }
+                
                 campaignTracking.set(contactId, campaign);
                 console.log(`[CampaignTracking] Registrado emisor de campaña para ${contactId}:`, {
                     originator: campaign.originator,
                     templateName: campaign.templateName,
-                    campaignId: campaign.campaignId
+                    campaignId: campaign.campaignId,
+                    templateContentWithParams: campaign.templateContentWithParams
                 });
             }
         } else if (tipo === 'mensaje') {
@@ -193,6 +239,7 @@ const handleWebhook = async (req, res) => {
                                     replyContent: '',
                                     replyTime: '',
                                     templateContent: '',
+                                    templateContentWithParams: '',
                                     campaignId: content.CampaignId
                                 });
                             }
@@ -219,7 +266,8 @@ const handleWebhook = async (req, res) => {
                             campaignDetails: finalCampaignDetails ? {
                                 templateName: finalCampaignDetails.templateName,
                                 originator: finalCampaignDetails.originator,
-                                campaignId: finalCampaignDetails.campaignId
+                                campaignId: finalCampaignDetails.campaignId,
+                                templateContentWithParams: finalCampaignDetails.templateContentWithParams
                             } : null
                         });
                         
