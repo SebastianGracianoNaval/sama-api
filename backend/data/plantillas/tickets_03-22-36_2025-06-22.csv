@@ -1,0 +1,16 @@
+"id","sequentialId","status","team","unreadMessages","storageDate","timestamp","estadoTicket","fechaCierre","tipoCierre","fechaFiltro","tipoDato","procesadoEn","conversacion","contacto","agente","duracion"
+"4a549f56-4497-4001-9a85-01979645b633",85,"Waiting","Default","","2025-06-22T06:14:00Z","","cerrado","2025-06-22T06:15:11.299Z","Por Agente","2025-06-22","ticket","2025-06-22T06:15:11.300Z","[cliente]: hola
+[agente]: esAbandono
+false
+[agente]: En estos momentos no aceptamos stickers.
+Solo entiendo textos simples.
+[agente]: hola chau","5491169007611","sebastian@bewise.com.es","0d 0h 1m 11s"
+"c85def23-c5fb-4800-9b57-019796471cf1",87,"Waiting","Default","","2025-06-22T06:15:32Z","","cerrado","2025-06-22T06:15:56.519Z","Por Agente","2025-06-22","ticket","2025-06-22T06:15:56.519Z","[agente]: hola que tal
+[agente]: como estas","5491169007611","sebastian@bewise.com.es","0d 0h 0m 24s"
+"85ac7ef7-1c65-43b9-be4f-01979649ba25",88,"Waiting","Default","","2025-06-22T06:18:23Z","","cerrado","2025-06-22T06:19:13.948Z","Por Agente","2025-06-22","ticket","2025-06-22T06:19:13.948Z","[cliente]: hola
+[agente]: chua
+[agente]: chauchau
+[cliente]: campaña bla","5491169007611","sebastian@bewise.com.es","0d 0h 0m 50s"
+"ce5523e1-f52d-4145-b99c-0197964ca302",89,"Waiting","Default","","2025-06-22T06:21:34Z","","cerrado","2025-06-22T06:22:13.247Z","Por Agente","2025-06-22","ticket","2025-06-22T06:22:13.247Z","[agente]: hola
+[agente]: ticket 89
+[agente]: blabla","5491169007611","sebastian@bewise.com.es","0d 0h 0m 39s"

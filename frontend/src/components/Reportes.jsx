@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Box, 
   Button, 
@@ -6,10 +6,6 @@ import {
   Typography, 
   Paper,
   ButtonGroup,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem
 } from '@mui/material';
 import { reportService } from '../services/api';
 import { showToast } from './Toast';
@@ -17,42 +13,16 @@ import MailIcon from '@mui/icons-material/Mail';
 import ContactsIcon from '@mui/icons-material/Contacts';
 import EventIcon from '@mui/icons-material/Event';
 import AllInboxIcon from '@mui/icons-material/AllInbox';
-import CampaignIcon from '@mui/icons-material/Campaign';
 import ClearIcon from '@mui/icons-material/Clear';
 import { downloadBlobResponse } from '../utils/downloadFile';
 
 const Reportes = () => {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
-  const [campañas, setCampañas] = useState([]);
-  const [campañaSeleccionada, setCampañaSeleccionada] = useState('');
-  const [loadingCampañas, setLoadingCampañas] = useState(false);
-
-  // Cargar lista de campañas al montar el componente
-  useEffect(() => {
-    cargarCampañas();
-  }, []);
-
-  const cargarCampañas = async () => {
-    try {
-      setLoadingCampañas(true);
-      const response = await reportService.getCampañasList();
-      if (response.data.success) {
-        setCampañas(response.data.campañas);
-        console.log('Campañas cargadas:', response.data.campañas);
-      }
-    } catch (error) {
-      console.error('Error al cargar campañas:', error);
-      showToast('Error al cargar la lista de campañas', 'error');
-    } finally {
-      setLoadingCampañas(false);
-    }
-  };
 
   const limpiarFechas = () => {
     setFechaInicio('');
     setFechaFin('');
-    setCampañaSeleccionada('');
   };
 
   const validarFechas = () => {
@@ -95,9 +65,6 @@ const Reportes = () => {
           break;
         case 'todo':
           response = await reportService.downloadAll(fechaInicio, fechaFin);
-          break;
-        case 'campañas':
-          response = await reportService.downloadCampañas(fechaInicio, fechaFin, campañaSeleccionada);
           break;
         default:
           return;
@@ -150,24 +117,6 @@ const Reportes = () => {
             }}
             inputProps={{ max: new Date().toISOString().slice(0, 10) }}
           />
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Campaña</InputLabel>
-            <Select
-              value={campañaSeleccionada}
-              label="Campaña"
-              onChange={(e) => setCampañaSeleccionada(e.target.value)}
-              disabled={loadingCampañas}
-            >
-              <MenuItem value="">
-                <em>Todas las campañas</em>
-              </MenuItem>
-              {campañas.map((campaña) => (
-                <MenuItem key={campaña} value={campaña}>
-                  {campaña}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
           <Button 
             variant="outlined" 
             startIcon={<ClearIcon />}
@@ -222,15 +171,6 @@ const Reportes = () => {
             onClick={() => descargarArchivo('todo')}
           >
             TODO
-          </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<CampaignIcon />}
-            sx={{ borderRadius: 3, minWidth: 120, fontWeight: 600 }}
-            onClick={() => descargarArchivo('campañas')}
-          >
-            CAMPAÑAS
           </Button>
         </ButtonGroup>
       </Box>

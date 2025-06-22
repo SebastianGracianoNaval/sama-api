@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, Divider, useTheme, Paper, Button, TextField } from '@mui/material';
+import { 
+  Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, 
+  Toolbar, Typography, Divider, useTheme, Paper, Button, TextField,
+  FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip
+} from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DescriptionIcon from '@mui/icons-material/Description';
 import HistoryIcon from '@mui/icons-material/History';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { reportService } from '../services/api';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -25,8 +30,11 @@ const ReportesLayout = () => {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [nombrePlantilla, setNombrePlantilla] = useState('');
+  
+  const [plantillasList, setPlantillasList] = useState([]);
+  const [loadingPlantillas, setLoadingPlantillas] = useState(false);
 
-  useEffect(() => {
+  const cargarHistorial = () => {
     setLoading(true);
     reportService.getReportesList()
       .then(res => {
@@ -37,11 +45,33 @@ const ReportesLayout = () => {
         setReportes([]);
       })
       .finally(() => setLoading(false));
+  };
+
+  const cargarPlantillas = async () => {
+    setLoadingPlantillas(true);
+    try {
+      const response = await reportService.getCampañasList();
+      if (response.data.success) {
+        setPlantillasList(response.data.campañas);
+        console.log('Nombres de plantillas cargados:', response.data.campañas);
+      }
+    } catch (error) {
+      console.error('Error al cargar nombres de plantillas:', error);
+      showToast('Error al cargar la lista de plantillas', 'error');
+    } finally {
+      setLoadingPlantillas(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarHistorial();
+    cargarPlantillas(); 
   }, []);
 
   const handleClearFilters = () => {
     setFechaInicio('');
     setFechaFin('');
+    setNombrePlantilla('');
   };
 
   const handleDownload = async (filename) => {
@@ -49,6 +79,7 @@ const ReportesLayout = () => {
     try {
       const response = await reportService.downloadReporte(filename);
       saveAs(new Blob([response.data]), filename);
+      setTimeout(cargarHistorial, 2000);
     } catch (error) {
       console.error('Error downloading file:', error);
       const backendMsg = error?.response?.data?.message || error?.response?.data?.error || 'Error al descargar el archivo';
@@ -82,20 +113,23 @@ const ReportesLayout = () => {
     try {
       let response;
       let filename = '';
+      const now = new Date();
+      const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+      const fecha = now.toISOString().slice(0,10);
+
       if (selected === 'Tickets') {
-        response = await reportService.downloadReporteByType('tickets', fechaInicio, fechaFin);
-        const now = new Date();
-        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-        const fecha = now.toISOString().slice(0,10);
-        filename = `tickets_${hora}_${fecha}.csv`;
+        response = await reportService.downloadTickets(fechaInicio, fechaFin);
+        filename = `tickets_consolidados_${hora}_${fecha}.csv`;
       } else if (selected === 'Campañas') {
-        response = await reportService.downloadReporteByType('plantillas', fechaInicio, fechaFin, nombrePlantilla);
-        const now = new Date();
-        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-        const fecha = now.toISOString().slice(0,10);
-        filename = `campañas_${hora}_${fecha}.csv`;
+        response = await reportService.downloadCampañas(fechaInicio, fechaFin, nombrePlantilla);
+        filename = nombrePlantilla 
+          ? `campana_${nombrePlantilla}_${hora}_${fecha}.csv`
+          : `campanas_consolidadas_${hora}_${fecha}.csv`;
       }
+      
       saveAs(new Blob([response.data]), filename);
+      showToast('Descarga iniciada correctamente', 'success');
+      setTimeout(cargarHistorial, 2000);
     } catch (error) {
       console.error('Error downloading file:', error);
       showToast(error.message || 'Error al descargar el archivo', 'error');
@@ -225,20 +259,37 @@ const ReportesLayout = () => {
               inputProps={{ max: new Date().toISOString().slice(0, 10) }}
             />
             {selected === 'Campañas' && (
-              <TextField
-                label="Nombre de Plantilla"
-                variant="outlined"
-                size="small"
-                value={nombrePlantilla}
-                onChange={(e) => setNombrePlantilla(e.target.value)}
-                sx={{ minWidth: 200 }}
-              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <FormControl size="small" sx={{ minWidth: 220 }}>
+                  <InputLabel>Nombre de Plantilla</InputLabel>
+                  <Select
+                    value={nombrePlantilla}
+                    label="Nombre de Plantilla"
+                    onChange={(e) => setNombrePlantilla(e.target.value)}
+                    disabled={loadingPlantillas}
+                  >
+                    <MenuItem value="">
+                      <em>Todas las plantillas</em>
+                    </MenuItem>
+                    {plantillasList.map((plantilla) => (
+                      <MenuItem key={plantilla} value={plantilla}>
+                        {plantilla}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Tooltip title="Recargar lista de plantillas">
+                  <IconButton onClick={cargarPlantillas} disabled={loadingPlantillas}>
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             )}
             <Button
               variant="outlined"
               color="secondary"
               onClick={handleClearFilters}
-              disabled={downloading || (!fechaInicio && !fechaFin)}
+              disabled={downloading}
               sx={{ minWidth: 100, fontWeight: 500, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
             >
               Limpiar
@@ -260,6 +311,11 @@ const ReportesLayout = () => {
             <Typography variant="h5" fontWeight={700} sx={{ fontFamily: 'Roboto, Arial' }}>
               Historial de exportaciones
             </Typography>
+            <Tooltip title="Actualizar historial">
+              <IconButton onClick={cargarHistorial} disabled={loading} sx={{ml: 2}}>
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
           {loading ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
