@@ -245,114 +245,105 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         const metadata = ticket.metadata || {};
         const seqId = content.sequentialId;
         const contacto = ticketInfo.contacto;
-        
+        const tipoTicket = ticketInfo.tipo || 'BOT';
+
         // Ordenar mensajes por fecha
         ticketInfo.mensajes.sort((a, b) => {
-            const fa = new Date(a['metadata.#envelope.storageDate'] || a['storageDate'] || a['fechaFiltro'] || 0).getTime();
-            const fb = new Date(b['metadata.#envelope.storageDate'] || b['storageDate'] || b['fechaFiltro'] || 0).getTime();
+            const fa = new Date(a['metadata.#envelope.storageDate'] || a['storageDate'] || 0).getTime();
+            const fb = new Date(b['metadata.#envelope.storageDate'] || b['storageDate'] || 0).getTime();
             return fa - fb;
         });
-
-        // Crear conversación con formato [agente]: y [cliente]:
-        const mensajesUnicos = [];
-        const mensajesVistos = new Set();
         
-        for (const m of ticketInfo.mensajes) {
-            const contenido = m.content || '';
-            const fecha = m['metadata.#envelope.storageDate'] || m['storageDate'] || m['fechaFiltro'] || '';
-            const clave = `${fecha}_${contenido}`;
-            
-            if (!mensajesVistos.has(clave)) {
-                mensajesUnicos.push(m);
-                mensajesVistos.add(clave);
-            }
-        }
+        // --- Extraer Primer Contacto del Agente ---
+        const primerMensajeAgente = ticketInfo.mensajes.find(m => {
+            const from = m.from || '';
+            const messageEmitter = m.metadata?.['#messageEmitter'];
+            return messageEmitter === 'Human' || (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net'));
+        });
 
-        const conversacion = mensajesUnicos.map(m => {
-            const fecha = m['metadata.#envelope.storageDate'] || m['storageDate'] || m['fechaFiltro'] || '';
-            const contenido = m.content || '';
+        let primerContacto = '';
+        if (primerMensajeAgente) {
+            const fecha = primerMensajeAgente['metadata.#envelope.storageDate'] || primerMensajeAgente['storageDate'] || '';
+            const contenido = primerMensajeAgente.content || '';
+            primerContacto = `${fecha} - ${contenido}`;
+        }
+        
+        // Crear conversación con formato [agente]: y [cliente]:
+        const conversacion = ticketInfo.mensajes.map(m => {
             const from = m.from || '';
             const to = m.to || '';
-            
-            // Determinar si es agente o cliente basándose en from/to
             let emisor = 'desconocido';
-            
-            // Si el contacto está en "to", entonces el mensaje es del agente
-            if (to.includes(contacto) || to.endsWith('@wa.gw.msging.net')) {
+            if ((from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || m.metadata?.['#messageEmitter'] === 'Human') {
                 emisor = 'agente';
-            }
-            // Si el contacto está en "from", entonces el mensaje es del cliente
-            else if (from.includes(contacto) || from.endsWith('@wa.gw.msging.net')) {
+            } else if (from.includes('@wa.gw.msging.net')) {
                 emisor = 'cliente';
             }
-            // Verificar si es un mensaje del agente (tiene metadata específica)
-            else if (m.metadata && m.metadata['#messageEmitter'] === 'Human') {
-                emisor = 'agente';
-            }
-            // Verificar si es un mensaje del bot (tiene from que termina en @msging.net)
-            else if (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) {
-                emisor = 'agente';
-            }
-            
-            return `[${emisor}]: ${contenido}`;
-        }).join('\n');
+            return `[${emisor}]: ${m.content || ''}`;
+        }).join('\\n');
 
-        // Preparar datos del ticket con estructura limpia
+        // --- Preparar datos base del ticket ---
         const ticketData = {
-            // Campos básicos del ticket
             id: ticket.id || '',
             sequentialId: content.sequentialId || '',
             status: content.status || '',
             team: content.team || '',
-            unreadMessages: content.unreadMessages || '',
-            
-            // Campos de metadatos
-            storageDate: metadata['#envelope.storageDate'] || content.storageDate || ticket.storageDate || '',
-            timestamp: metadata['#wa.timestamp'] || ticket.timestamp || '',
-            
-            // Campos de estado actualizados
+            unreadMessages: content.unreadMessages || 0,
+            storageDate: metadata['#envelope.storageDate'] || content.storageDate || '',
+            timestamp: metadata['#wa.timestamp'] || '',
             estadoTicket: 'cerrado',
             fechaCierre: ticketInfo.fechaCierre || '',
             tipoCierre: ticketInfo.tipoCierre || '',
-            
-            // Campos de sistema
             fechaFiltro: obtenerFechaFiltro(ticket),
-            tipoDato: 'ticket',
+            tipoDato: 'ticket_reporte',
             procesadoEn: new Date().toISOString(),
-            
-            // Campo especial para tickets cerrados
             conversacion: conversacion,
             contacto: contacto,
             agente: ticketInfo.correoAgente || '',
-            duracion: ticketInfo.duracion || ''
+            duracion: ticketInfo.duracion || '',
+            TIPO: tipoTicket
         };
+        
+        let campos;
 
-        // Generar nombre del archivo con el formato ticket_{sequentialId}_{fecha}
-        const fechaCierre = new Date(ticketInfo.fechaCierre || ticket.fechaFiltro);
-        const fechaFormateada = fechaCierre.toISOString().slice(0, 10);
+        // --- Añadir campos específicos y definir columnas ---
+        if (tipoTicket === 'PLANTILLA') {
+            const details = ticketInfo.campaignDetails || {};
+            ticketData.plantilla = details.templateName || '';
+            ticketData.respuesta = details.replied ? 'TRUE' : 'FALSE';
+            ticketData.contenido = details.replyContent || '';
+            ticketData.emisor = details.originator || '';
+            ticketData.hora_envio = details.sentTime || '';
+            ticketData.primer_contacto = primerContacto;
+
+            campos = [
+                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
+                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
+                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
+                'plantilla', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+            ];
+        } else { // BOT
+            campos = [
+                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
+                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
+                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO'
+            ];
+        }
+
+        const fechaFormateada = new Date(ticketInfo.fechaCierre || Date.now()).toISOString().slice(0, 10);
         const nombreArchivo = `ticket_${seqId}_${fechaFormateada}.csv`;
         
-        // Crear carpeta de reportes si no existe
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
             fs.mkdirSync(carpetaReportes, { recursive: true });
         }
 
-        // Generar CSV con campos específicos para tickets cerrados
-        const campos = [
-            'id', 'sequentialId', 'status', 'team', 'unreadMessages',
-            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
-            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente',
-            'duracion'
-        ];
-        
         const parser = new Parser({ fields: campos, header: true });
         const csv = parser.parse([ticketData]);
 
         const rutaArchivo = path.join(carpetaReportes, nombreArchivo);
         fs.writeFileSync(rutaArchivo, csv);
         
-        console.log(`[generarTicketIndividual] Archivo generado: ${nombreArchivo} para contacto ${contacto}`);
+        console.log(`[generarTicketIndividual] Archivo de reporte generado: ${nombreArchivo} (Tipo: ${tipoTicket})`);
         return rutaArchivo;
     } catch (error) {
         console.error('[generarTicketIndividual] Error:', error);

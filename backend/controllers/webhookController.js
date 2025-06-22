@@ -15,14 +15,15 @@ const path = require('path');
 const { Parser } = require('json2csv');
 const fs = require('fs');
 
-// Mapa global para mantener tickets abiertos por contacto
+// Mapa para rastrear interacciones de campañas antes de que se cree un ticket
+// Clave: contactIdentity (ej. '5491169007611@wa.gw.msging.net')
+// Valor: { templateName, originator, sentTime, replied, replyContent, replyTime, templateContent }
+const campaignTracking = new Map();
+
+// Mapa para mantener tickets abiertos por contacto
+// Clave: contactIdentity
+// Valor: { ticket, mensajes, eventos, cerrado, fechaApertura, tipo, campaignDetails }
 const ticketsAbiertos = new Map();
-
-// Mapa global para registrar información de campañas por contacto
-const contactCampaignInfo = new Map();
-
-// Mapa global para mantener plantillas registradas por campaignId
-const plantillasRegistradas = new Map();
 
 /**
  * Maneja las solicitudes POST del webhook
@@ -46,6 +47,44 @@ const handleWebhook = async (req, res) => {
         const tipo = identificarTipoJson(jsonData);
         console.log('[Webhook] Tipo identificado:', tipo);
         
+        // --- LÓGICA DE TRACKING DE CAMPAÑAS ---
+        if (tipo === 'plantilla') {
+            const templateName = jsonData.content?.template?.name;
+            const to = jsonData.to;
+            // Si es un mensaje de plantilla enviado a un usuario, registrar la hora de envío
+            if (templateName && to && to.endsWith('@wa.gw.msging.net')) {
+                const contactId = to;
+                const campaign = campaignTracking.get(contactId) || {};
+                campaign.sentTime = jsonData.metadata?.['#envelope.storageDate'] || new Date().toISOString();
+                campaign.templateName = templateName;
+                campaign.templateContent = jsonData.content?.templateContent?.components?.find(c => c.type === 'BODY')?.text || '';
+                campaignTracking.set(contactId, campaign);
+                console.log(`[CampaignTracking] Registrada hora de envío de plantilla para ${contactId}`);
+            }
+        } else if (tipo === 'contacto') {
+            // Si es una actualización de contacto con info de campaña, registrar emisor
+            if (jsonData.extras?.campaignMessageTemplate) {
+                const contactId = jsonData.identity;
+                const campaign = campaignTracking.get(contactId) || {};
+                campaign.originator = jsonData.extras.campaignOriginator || '';
+                campaign.templateName = jsonData.extras.campaignMessageTemplate;
+                campaignTracking.set(contactId, campaign);
+                console.log(`[CampaignTracking] Registrado emisor de campaña para ${contactId}`);
+            }
+        } else if (tipo === 'mensaje') {
+            const contactId = jsonData.from;
+            // Si es una respuesta de un usuario que recibió una campaña, registrar la respuesta
+            if (contactId && campaignTracking.has(contactId)) {
+                const campaign = campaignTracking.get(contactId);
+                if (!campaign.replied) { // Solo registrar la primera respuesta
+                    campaign.replied = true;
+                    campaign.replyContent = jsonData.content || '';
+                    campaign.replyTime = jsonData.metadata?.['#envelope.storageDate'] || new Date().toISOString();
+                    console.log(`[CampaignTracking] Registrada respuesta a campaña para ${contactId}`);
+                }
+            }
+        }
+        
         if (!tipo || tipo === 'desconocido') {
             console.error('[Webhook] No se pudo identificar el tipo de datos del JSON recibido');
             return res.status(400).json({
@@ -68,26 +107,16 @@ const handleWebhook = async (req, res) => {
                 rutaArchivo = await procesarMensajes(jsonData, outputPath);
                 break;
             case 'contacto':
-                // Si es un contacto, verificar si trae info de campaña
-                if (jsonData.extras && jsonData.extras.campaignMessageTemplate) {
-                    contactCampaignInfo.set(jsonData.identity, {
-                        templateName: jsonData.extras.campaignMessageTemplate,
-                        originator: jsonData.extras.campaignOriginator || ''
-                    });
-                    console.log(`[Webhook] Info de campaña guardada para contacto ${jsonData.identity}: Template=${jsonData.extras.campaignMessageTemplate}`);
-                }
                 rutaArchivo = await procesarContactos(jsonData, outputPath);
                 break;
             case 'evento':
                 rutaArchivo = await procesarEventos(jsonData, outputPath);
                 break;
             case 'ticket':
-                rutaArchivo = await procesarTickets(jsonData, outputPath, plantillasRegistradas, contactCampaignInfo);
+                rutaArchivo = await procesarTickets(jsonData, outputPath);
                 break;
             case 'plantilla':
                 rutaArchivo = await procesarPlantillas(jsonData, outputPath);
-                // Registrar la plantilla para tracking de tickets
-                registrarPlantilla(jsonData);
                 break;
             default:
                 throw new Error(`Tipo no soportado: ${tipo}`);
@@ -127,10 +156,9 @@ const handleWebhook = async (req, res) => {
                         const metadata = item.metadata || {};
                         const fechaApertura = metadata['#envelope.storageDate'] || content.storageDate || item.storageDate || new Date().toISOString();
 
-                        // Determinar si es ticket de plantilla
-                        const campaignId = content.CampaignId || metadata['#activecampaign.flowId'] || '';
-                        const esDePlantilla = campaignId && plantillasRegistradas.has(campaignId);
-                        const infoPlantilla = esDePlantilla ? plantillasRegistradas.get(campaignId) : null;
+                        // Determinar si es un ticket de campaña y qué tipo
+                        const campaignDetails = campaignTracking.get(contacto);
+                        const ticketType = campaignDetails ? 'PLANTILLA' : 'BOT';
 
                         ticketsAbiertos.set(contacto, {
                             ticket: item,
@@ -140,11 +168,15 @@ const handleWebhook = async (req, res) => {
                             fechaCierre: null,
                             fechaApertura: fechaApertura,
                             contacto: contacto,
-                            origen: esDePlantilla ? 'plantilla' : 'bot',
-                            nombrePlantilla: infoPlantilla ? infoPlantilla.nombrePlantilla : '',
-                            campaignId: campaignId
+                            tipo: ticketType,
+                            campaignDetails: campaignDetails || null,
                         });
-                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${content.sequentialId}) con fecha ${fechaApertura} - Origen: ${esDePlantilla ? 'plantilla' : 'bot'}`);
+                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${content.sequentialId}) - Tipo: ${ticketType}`);
+                        
+                        // Una vez que el ticket se abre, podemos limpiar el tracking para este contacto
+                        if (campaignDetails) {
+                            campaignTracking.delete(contacto);
+                        }
                     }
                 }
 
@@ -184,8 +216,8 @@ const registrarPlantilla = (jsonData) => {
     try {
         const infoPlantilla = extraerInfoPlantilla(jsonData);
         if (infoPlantilla.campaignId) {
-            plantillasRegistradas.set(infoPlantilla.campaignId, infoPlantilla);
-            console.log(`[Plantilla] Registrada plantilla: ${infoPlantilla.nombrePlantilla} con campaignId: ${infoPlantilla.campaignId}`);
+            campaignTracking.set(infoPlantilla.campaignId, infoPlantilla);
+            console.log(`[Plantilla] Registrada plantilla: ${infoPlantilla.templateName} con campaignId: ${infoPlantilla.campaignId}`);
         }
     } catch (error) {
         console.error('[registrarPlantilla] Error:', error);

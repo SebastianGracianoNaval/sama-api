@@ -14,6 +14,7 @@ const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampan
 const reportController = require('./controllers/reportController');
 const { parse } = require('csv-parse/sync');
 const { Parser } = require('json2csv');
+const archiver = require('archiver');
 
 // Crear una aplicación Express
 const app = express();
@@ -225,7 +226,6 @@ app.get('/descargar/todo', async (req, res) => {
         console.log(`[TODO] Archivos a incluir en ZIP:`, archivos.map(a => ({ ruta: a.ruta, nombre: a.nombre })));
         
         // Siempre crear un ZIP, sin importar si hay uno o varios archivos
-        const archiver = require('archiver');
         const archive = archiver('zip', { zlib: { level: 9 } });
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
@@ -376,6 +376,29 @@ app.get('/api/reportes', reportController.getReportesList);
 app.get('/api/reportes/download/:filename', reportController.downloadReporte);
 app.get('/api/reportes/:tipo', reportController.downloadReporteByType);
 
+// Función para leer y parsear todos los reportes de tickets
+const getAllTicketReports = (fechas) => {
+    const carpetaReportes = path.join(__dirname, 'data', 'reportes');
+    if (!fs.existsSync(carpetaReportes)) return [];
+
+    const archivos = fs.readdirSync(carpetaReportes)
+        .filter(f => f.startsWith('ticket_') && f.endsWith('.csv'));
+
+    let todosLosTickets = [];
+    for (const archivo of archivos) {
+        const contenido = fs.readFileSync(path.join(carpetaReportes, archivo), 'utf-8');
+        const tickets = parse(contenido, { columns: true, skip_empty_lines: true });
+        todosLosTickets.push(...tickets);
+    }
+
+    if (fechas) {
+        todosLosTickets = todosLosTickets.filter(t => 
+            t.fechaFiltro >= fechas.fechaInicio && t.fechaFiltro <= fechas.fechaFin
+        );
+    }
+    return todosLosTickets;
+};
+
 // Ruta para descargar tickets (BOT y PLANTILLA) en un ZIP
 app.get('/descargar/tickets', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query;
@@ -385,28 +408,26 @@ app.get('/descargar/tickets', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
         }
 
-        const carpetaTickets = path.join(__dirname, 'data', 'tickets');
-        const rutaConsolidada = await consolidarCsvs(carpetaTickets, 'ticket', fechas);
+        const todosLosTickets = getAllTicketReports(fechas);
 
-        if (!rutaConsolidada) {
+        if (todosLosTickets.length === 0) {
             return res.status(404).json({ success: false, message: 'No hay tickets para exportar en el período especificado.' });
         }
 
-        const contenido = fs.readFileSync(rutaConsolidada, 'utf-8');
-        const tickets = parse(contenido, { columns: true, skip_empty_lines: true });
+        const ticketsBot = todosLosTickets.filter(t => t.TIPO === 'BOT');
+        const ticketsPlantilla = todosLosTickets.filter(t => t.TIPO === 'PLANTILLA');
 
-        const ticketsBot = tickets.filter(t => t.origen === 'bot');
-        const ticketsPlantilla = tickets.filter(t => t.origen === 'plantilla');
+        const botParser = new Parser({ fields: Object.keys(ticketsBot[0] || {}) });
+        const plantillaParser = new Parser({ fields: Object.keys(ticketsPlantilla[0] || {}) });
+        
+        const csvBot = ticketsBot.length > 0 ? botParser.parse(ticketsBot) : "";
+        const csvPlantilla = ticketsPlantilla.length > 0 ? plantillaParser.parse(ticketsPlantilla) : "";
 
-        const parser = new Parser();
-        const csvBot = ticketsBot.length > 0 ? parser.parse(ticketsBot) : "";
-        const csvPlantilla = ticketsPlantilla.length > 0 ? parser.parse(ticketsPlantilla) : "";
-
-        const archiver = require('archiver');
         const archive = archiver('zip', { zlib: { level: 9 } });
         
+        const zipName = `reporte_tickets_${new Date().toISOString().slice(0,10)}.zip`;
         res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', `attachment; filename="reporte_tickets.zip"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
 
         archive.pipe(res);
         if (csvBot) archive.append(csvBot, { name: 'tickets_bot.csv' });
@@ -444,39 +465,26 @@ app.get('/api/campanas', async (req, res) => {
 // Ruta para descargar reporte de campanas (solo tickets de plantilla)
 app.get('/descargar/campanas', async (req, res) => {
     const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
-    
     try {
         const fechas = (fechaInicio && fechaFin) ? validarFechas(fechaInicio, fechaFin) : null;
         if ((fechaInicio && fechaFin) && !fechas) {
             return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
         }
-
-        const carpetaTickets = path.join(__dirname, 'data', 'tickets');
-        const rutaConsolidada = await consolidarCsvs(carpetaTickets, 'ticket', fechas);
-
-        if (!rutaConsolidada) {
-            return res.status(404).json({ success: false, message: 'No hay datos de campañas para exportar.' });
-        }
         
-        const contenido = fs.readFileSync(rutaConsolidada, 'utf-8');
-        let tickets = parse(contenido, { columns: true, skip_empty_lines: true });
+        let ticketsPlantilla = getAllTicketReports(fechas).filter(t => t.TIPO === 'PLANTILLA');
 
-        // Filtrar solo por plantilla
-        tickets = tickets.filter(t => t.origen === 'plantilla');
-
-        // Filtrar por nombre de plantilla si se especifica
         if (nombrePlantilla) {
-            tickets = tickets.filter(t => t.nombrePlantilla === nombrePlantilla);
+            ticketsPlantilla = ticketsPlantilla.filter(t => t.plantilla === nombrePlantilla);
         }
 
-        if (tickets.length === 0) {
+        if (ticketsPlantilla.length === 0) {
             return res.status(404).json({ success: false, message: 'No hay datos de campañas para los filtros seleccionados.' });
         }
 
         const parser = new Parser();
-        const csvFinal = parser.parse(tickets);
+        const csvFinal = parser.parse(ticketsPlantilla);
         
-        const nombreArchivo = `reporte_campanas_${new Date().toISOString()}.csv`;
+        const nombreArchivo = `reporte_campanas_${new Date().toISOString().slice(0,10)}.csv`;
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
         res.send(csvFinal);
