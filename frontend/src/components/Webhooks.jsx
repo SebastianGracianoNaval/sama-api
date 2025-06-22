@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ClearAllIcon from '@mui/icons-material/ClearAll';
 import { webhookService } from '../services/api';
 import { showToast } from './Toast';
 
@@ -35,6 +36,13 @@ const Webhooks = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const limpiarWebhooks = () => {
+    setWebhooks([]);
+    setDisplayedCount(10);
+    setJsonHeights({});
+    showToast('Webhooks limpiados de la vista', 'success');
   };
 
   const cargarMas = async () => {
@@ -85,13 +93,23 @@ const Webhooks = () => {
         <Typography variant="h5">
           Últimos webhooks recibidos
         </Typography>
-        <IconButton 
-          onClick={cargarWebhooks} 
-          disabled={loading}
-          color="primary"
-        >
-          <RefreshIcon />
-        </IconButton>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <IconButton 
+            onClick={limpiarWebhooks} 
+            color="error"
+            title="Limpiar webhooks de la vista"
+          >
+            <ClearAllIcon />
+          </IconButton>
+          <IconButton 
+            onClick={cargarWebhooks} 
+            disabled={loading}
+            color="primary"
+            title="Recargar webhooks"
+          >
+            <RefreshIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       {webhooks.length === 0 ? (
