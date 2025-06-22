@@ -391,6 +391,79 @@ app.get('/descargar/tickets', async (req, res) => {
     }
 });
 
+// Nueva ruta para obtener lista de campañas disponibles
+app.get('/api/campañas', async (req, res) => {
+    try {
+        console.log('[API/CAMPAÑAS] Obteniendo lista de campañas disponibles');
+        const carpeta = obtenerRutaCarpeta('ticket');
+        const pathCarpeta = path.join(__dirname, carpeta);
+        
+        const campañas = obtenerCampañasDisponibles(pathCarpeta);
+        
+        res.json({
+            success: true,
+            campañas: campañas,
+            total: campañas.length
+        });
+    } catch (error) {
+        console.error('[API/CAMPAÑAS] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener la lista de campañas',
+            error: error.message
+        });
+    }
+});
+
+// Nueva ruta para descargar campañas
+app.get('/descargar/campañas', async (req, res) => {
+    const { fechaInicio, fechaFin, nombreCampaña } = req.query;
+    console.log(`[DESCARGAR/CAMPAÑAS] Parámetros - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}', nombreCampaña: '${nombreCampaña}'`);
+    
+    try {
+        let fechasValidas = null;
+        if (fechaInicio && fechaFin) {
+            fechasValidas = validarFechas(fechaInicio, fechaFin);
+            if (!fechasValidas) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Fechas inválidas. Asegúrese de que las fechas no sean futuras y que la fecha de inicio no sea posterior a la fecha fin.'
+                });
+            }
+        }
+        
+        const carpeta = obtenerRutaCarpeta('ticket');
+        const pathCarpeta = path.join(__dirname, carpeta);
+        
+        if (!fs.existsSync(pathCarpeta)) {
+            fs.mkdirSync(pathCarpeta, { recursive: true });
+            return res.status(404).json({
+                success: false,
+                message: 'No hay datos disponibles para descargar.'
+            });
+        }
+        
+        const rutaCsv = await consolidarCampañas(pathCarpeta, fechasValidas, nombreCampaña);
+        
+        if (!rutaCsv) {
+            return res.status(404).json({
+                success: false,
+                message: 'No hay datos de campañas disponibles para descargar en el período especificado.'
+            });
+        }
+        
+        console.log(`[DESCARGAR/CAMPAÑAS] Descargando archivo: ${rutaCsv}`);
+        res.download(rutaCsv);
+    } catch (error) {
+        console.error(`[DESCARGAR/CAMPAÑAS] Error:`, error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al descargar las campañas',
+            error: error.message
+        });
+    }
+});
+
 // Iniciar el servidor
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);

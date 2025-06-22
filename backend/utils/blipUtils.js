@@ -1,7 +1,7 @@
 /**
  * Identifica el tipo de JSON de BLiP basado en sus campos
  * @param {Object} jsonData - Los datos JSON a analizar
- * @returns {string} - El tipo identificado ('mensaje', 'evento', 'contacto' o null)
+ * @returns {string} - El tipo identificado ('mensaje', 'evento', 'contacto', 'plantilla', 'ticket' o 'desconocido')
  */
 const identificarTipoJson = (jsonData) => {
     if (!jsonData) return 'otro';
@@ -16,6 +16,15 @@ const identificarTipoJson = (jsonData) => {
             return 'ticket';
         }
     }
+    
+    // 📋 Plantillas (templates)
+    if (jsonData.type === 'application/json' && jsonData.content && jsonData.content.type === 'template') {
+        return 'plantilla';
+    }
+    if (jsonData.content && jsonData.content.template && jsonData.content.template.name) {
+        return 'plantilla';
+    }
+    
     // 📩 Mensajes
     if ('type' in jsonData) {
         return 'mensaje';
@@ -33,8 +42,111 @@ const identificarTipoJson = (jsonData) => {
 };
 
 /**
+ * Extrae información de una plantilla
+ * @param {Object} jsonData - Los datos JSON de la plantilla
+ * @returns {Object} - Información extraída de la plantilla
+ */
+const extraerInfoPlantilla = (jsonData) => {
+    try {
+        const content = jsonData.content || {};
+        const template = content.template || {};
+        const templateContent = content.templateContent || {};
+        
+        // Extraer nombre de la plantilla
+        const nombrePlantilla = template.name || templateContent.name || '';
+        
+        // Extraer contenido de la plantilla
+        let contenidoPlantilla = '';
+        if (templateContent.components) {
+            const bodyComponent = templateContent.components.find(comp => comp.type === 'BODY');
+            if (bodyComponent && bodyComponent.text) {
+                contenidoPlantilla = bodyComponent.text;
+            }
+        }
+        
+        // Extraer parámetros si existen
+        const parametros = [];
+        if (template.components) {
+            const bodyComponent = template.components.find(comp => comp.type === 'body');
+            if (bodyComponent && bodyComponent.parameters) {
+                parametros.push(...bodyComponent.parameters.map(param => param.text || ''));
+            }
+        }
+        
+        // Extraer metadata de ActiveCampaign si existe
+        const metadata = jsonData.metadata || {};
+        const campaignId = metadata['#activecampaign.flowId'] || '';
+        const campaignName = metadata['#activecampaign.name'] || '';
+        const stateId = metadata['#activecampaign.stateId'] || '';
+        
+        return {
+            nombrePlantilla,
+            contenidoPlantilla,
+            parametros,
+            campaignId,
+            campaignName,
+            stateId,
+            metadata
+        };
+    } catch (error) {
+        console.error('[extraerInfoPlantilla] Error:', error);
+        return {
+            nombrePlantilla: '',
+            contenidoPlantilla: '',
+            parametros: [],
+            campaignId: '',
+            campaignName: '',
+            stateId: '',
+            metadata: {}
+        };
+    }
+};
+
+/**
+ * Determina si un ticket proviene de una plantilla
+ * @param {Object} ticketData - Datos del ticket
+ * @param {Map} plantillasRegistradas - Mapa de plantillas registradas
+ * @returns {Object} - Información sobre el origen del ticket
+ */
+const determinarOrigenTicket = (ticketData, plantillasRegistradas = new Map()) => {
+    try {
+        const content = ticketData.content || {};
+        const metadata = ticketData.metadata || {};
+        
+        // Buscar CampaignId en el ticket
+        const campaignId = content.CampaignId || metadata['#activecampaign.flowId'] || '';
+        
+        if (campaignId && plantillasRegistradas.has(campaignId)) {
+            const infoPlantilla = plantillasRegistradas.get(campaignId);
+            return {
+                esDePlantilla: true,
+                nombrePlantilla: infoPlantilla.nombrePlantilla,
+                campaignId: campaignId,
+                campaignName: infoPlantilla.campaignName
+            };
+        }
+        
+        // Si no tiene CampaignId, probablemente es del BOT
+        return {
+            esDePlantilla: false,
+            nombrePlantilla: '',
+            campaignId: '',
+            campaignName: ''
+        };
+    } catch (error) {
+        console.error('[determinarOrigenTicket] Error:', error);
+        return {
+            esDePlantilla: false,
+            nombrePlantilla: '',
+            campaignId: '',
+            campaignName: ''
+        };
+    }
+};
+
+/**
  * Obtiene la ruta de la carpeta correspondiente al tipo de dato
- * @param {string} tipo - El tipo de dato ('mensaje', 'evento', 'contacto')
+ * @param {string} tipo - El tipo de dato ('mensaje', 'evento', 'contacto', 'plantilla', 'ticket')
  * @returns {string} - La ruta de la carpeta
  */
 const obtenerRutaCarpeta = (tipo) => {
@@ -42,7 +154,9 @@ const obtenerRutaCarpeta = (tipo) => {
         mensaje: 'data/mensajes',
         evento: 'data/eventos',
         contacto: 'data/contactos',
-        ticket: 'data/tickets'
+        ticket: 'data/tickets',
+        plantilla: 'data/plantillas',
+        campaña: 'data/campañas'
     };
     return rutas[tipo] || null;
 };
@@ -61,6 +175,8 @@ const generarNombreArchivo = (tipo) => {
 
 module.exports = {
     identificarTipoJson,
+    extraerInfoPlantilla,
+    determinarOrigenTicket,
     obtenerRutaCarpeta,
     generarNombreArchivo
 }; 

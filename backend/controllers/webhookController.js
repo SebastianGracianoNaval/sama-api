@@ -3,17 +3,23 @@ const {
     procesarContactos, 
     procesarEventos, 
     procesarTickets,
+    procesarPlantillas,
     consolidarCsvs,
     consolidarTicketsCsvs, 
+    consolidarCampañas,
+    obtenerCampañasDisponibles,
     generarTicketIndividual 
 } = require('../utils/csvUtils');
-const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo, detectarCierreTicket } = require('../utils/blipUtils');
+const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo, extraerInfoPlantilla } = require('../utils/blipUtils');
 const path = require('path');
 const { Parser } = require('json2csv');
 const fs = require('fs');
 
 // Mapa global para mantener tickets abiertos por contacto
 const ticketsAbiertos = new Map();
+
+// Mapa global para mantener plantillas registradas por campaignId
+const plantillasRegistradas = new Map();
 
 /**
  * Maneja las solicitudes POST del webhook
@@ -65,14 +71,19 @@ const handleWebhook = async (req, res) => {
                 rutaArchivo = await procesarEventos(jsonData, outputPath);
                 break;
             case 'ticket':
-                rutaArchivo = await procesarTickets(jsonData, outputPath);
+                rutaArchivo = await procesarTickets(jsonData, outputPath, plantillasRegistradas);
+                break;
+            case 'plantilla':
+                rutaArchivo = await procesarPlantillas(jsonData, outputPath);
+                // Registrar la plantilla para tracking de tickets
+                registrarPlantilla(jsonData);
                 break;
             default:
                 throw new Error(`Tipo no soportado: ${tipo}`);
         }
 
         // --- LÓGICA ESPECIAL PARA TICKETS (tracking de conversaciones) ---
-        if (tipo === 'ticket' || tipo === 'mensaje') { // Ya no procesamos eventos para cierre
+        if (tipo === 'ticket' || tipo === 'mensaje') {
             // Función para extraer el número de teléfono del contacto
             const extraerContacto = (obj) => {
                 const campos = [
@@ -105,6 +116,11 @@ const handleWebhook = async (req, res) => {
                         const metadata = item.metadata || {};
                         const fechaApertura = metadata['#envelope.storageDate'] || content.storageDate || item.storageDate || new Date().toISOString();
 
+                        // Determinar si es ticket de plantilla
+                        const campaignId = content.CampaignId || metadata['#activecampaign.flowId'] || '';
+                        const esDePlantilla = campaignId && plantillasRegistradas.has(campaignId);
+                        const infoPlantilla = esDePlantilla ? plantillasRegistradas.get(campaignId) : null;
+
                         ticketsAbiertos.set(contacto, {
                             ticket: item,
                             mensajes: [],
@@ -112,9 +128,12 @@ const handleWebhook = async (req, res) => {
                             cerrado: false,
                             fechaCierre: null,
                             fechaApertura: fechaApertura,
-                            contacto: contacto
+                            contacto: contacto,
+                            origen: esDePlantilla ? 'plantilla' : 'bot',
+                            nombrePlantilla: infoPlantilla ? infoPlantilla.nombrePlantilla : '',
+                            campaignId: campaignId
                         });
-                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${item['content.sequentialId']}) con fecha ${fechaApertura}`);
+                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${content.sequentialId}) con fecha ${fechaApertura} - Origen: ${esDePlantilla ? 'plantilla' : 'bot'}`);
                     }
                 }
 
@@ -125,8 +144,6 @@ const handleWebhook = async (req, res) => {
                     if (tipo === 'mensaje') {
                         ticketInfo.mensajes.push(item);
                     }
-                    
-                    // Se elimina la lógica de cierre por eventos de aquí
                 }
             }
         }
@@ -145,6 +162,22 @@ const handleWebhook = async (req, res) => {
             message: 'Error al procesar los datos',
             error: error.message
         });
+    }
+};
+
+/**
+ * Registra una plantilla en el mapa global para tracking
+ * @param {Object} jsonData - Datos JSON de la plantilla
+ */
+const registrarPlantilla = (jsonData) => {
+    try {
+        const infoPlantilla = extraerInfoPlantilla(jsonData);
+        if (infoPlantilla.campaignId) {
+            plantillasRegistradas.set(infoPlantilla.campaignId, infoPlantilla);
+            console.log(`[Plantilla] Registrada plantilla: ${infoPlantilla.nombrePlantilla} con campaignId: ${infoPlantilla.campaignId}`);
+        }
+    } catch (error) {
+        console.error('[registrarPlantilla] Error:', error);
     }
 };
 
@@ -329,7 +362,7 @@ const consolidarTickets = async (req, res) => {
  */
 const handleBotEvent = async (req, res) => {
     try {
-        const { correoAgente, ticketFinalizo, identity, tipoEvento = 'finalizacion_ticket' } = req.body;
+        const { correoAgente, ticketFinalizo, identity, tipoEvento = 'finalizacion_ticket', tipoCierre } = req.body;
         
         console.log('[BotEvent] Datos recibidos:', JSON.stringify(req.body, null, 2));
         
@@ -352,6 +385,7 @@ const handleBotEvent = async (req, res) => {
             numeroTelefono,
             ticketFinalizo: ticketFinalizo === 'true' || ticketFinalizo === true,
             tipoEvento,
+            tipoCierre: tipoCierre || '',
             timestamp: new Date().toISOString(),
             procesadoEn: new Date().toISOString(),
             // Campos adicionales para compatibilidad con el sistema existente
@@ -370,6 +404,7 @@ const handleBotEvent = async (req, res) => {
                 ticketInfo.cerrado = true;
                 ticketInfo.fechaCierre = eventoBot.timestamp;
                 ticketInfo.correoAgente = correoAgente;
+                ticketInfo.tipoCierre = tipoCierre || '';
 
                 // Calcular y guardar la duración del ticket
                 const duracion = calcularDuracionTicket(ticketInfo.fechaApertura, ticketInfo.fechaCierre);
@@ -377,14 +412,15 @@ const handleBotEvent = async (req, res) => {
                 
                 console.log(`[BotEvent] Ticket cerrado para contacto ${numeroTelefono} por agente ${correoAgente}. Duración: ${duracion}`);
                 
-                // Generar archivo individual del ticket con información del agente
+                // Generar archivo individual del ticket con información del agente y tipoCierre
                 try {
                     const carpeta = obtenerRutaCarpeta('ticket');
                     const rutaCarpeta = path.join(__dirname, '..', carpeta);
                     
-                    // Agregar información del agente al ticket
+                    // Agregar información del agente y tipoCierre al ticket
                     ticketInfo.agente = correoAgente;
                     ticketInfo.fechaCierre = eventoBot.timestamp;
+                    ticketInfo.tipoCierre = tipoCierre || '';
                     
                     generarTicketIndividual(ticketInfo, rutaCarpeta);
                     console.log(`[BotEvent] Archivo individual generado para contacto ${numeroTelefono}`);
@@ -405,7 +441,7 @@ const handleBotEvent = async (req, res) => {
             // Crear CSV con el evento del bot
             const campos = [
                 'id', 'correoAgente', 'identity', 'numeroTelefono', 'ticketFinalizo',
-                'tipoEvento', 'timestamp', 'procesadoEn', 'storageDate', 'fechaFiltro', 'tipoDato'
+                'tipoEvento', 'tipoCierre', 'timestamp', 'procesadoEn', 'storageDate', 'fechaFiltro', 'tipoDato'
             ];
             
             const parser = new Parser({ fields: campos, header: true });
@@ -443,6 +479,7 @@ const handleBotEvent = async (req, res) => {
                     identity: eventoBot.identity,
                     ticketFinalizo: eventoBot.ticketFinalizo,
                     tipoEvento: eventoBot.tipoEvento,
+                    tipoCierre: eventoBot.tipoCierre,
                     timestamp: eventoBot.timestamp,
                     numeroTelefono: eventoBot.numeroTelefono
                 }

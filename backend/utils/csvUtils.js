@@ -313,6 +313,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             // Campos de estado actualizados
             estadoTicket: 'cerrado',
             fechaCierre: ticketInfo.fechaCierre || '',
+            tipoCierre: ticketInfo.tipoCierre || '',
             
             // Campos de sistema
             fechaFiltro: obtenerFechaFiltro(ticket),
@@ -340,7 +341,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         // Generar CSV con campos específicos para tickets cerrados
         const campos = [
             'id', 'sequentialId', 'status', 'team', 'unreadMessages',
-            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre',
+            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
             'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente',
             'duracion'
         ];
@@ -456,6 +457,209 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
     } catch (error) {
         console.error('[consolidarTicketsCsvs] Error:', error);
         throw error;
+    }
+};
+
+/**
+ * Consolida archivos CSV de campañas (solo tickets de plantillas)
+ * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
+ * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
+ * @param {string} nombreCampaña - Nombre específico de campaña para filtrar (opcional)
+ * @returns {Promise<string>} - Ruta del archivo CSV consolidado
+ */
+const consolidarCampañas = async (directorio, fechas = null, nombreCampaña = null) => {
+    try {
+        console.log(`[consolidarCampañas] Iniciando consolidación de campañas, directorio: ${directorio}`);
+        console.log(`[consolidarCampañas] Fechas recibidas:`, fechas);
+        console.log(`[consolidarCampañas] Nombre de campaña filtro:`, nombreCampaña);
+        
+        // Buscar archivos CSV de tickets en la carpeta de reportes
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        if (!fs.existsSync(carpetaReportes)) {
+            console.log('[consolidarCampañas] No existe carpeta de reportes');
+            return null;
+        }
+
+        const archivos = fs.readdirSync(carpetaReportes)
+            .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
+
+        console.log('[consolidarCampañas] Archivos de tickets encontrados:', archivos);
+
+        if (archivos.length === 0) {
+            console.log('[consolidarCampañas] No hay archivos de tickets para consolidar');
+            return null;
+        }
+
+        let datosCombinados = [];
+        let encabezados = null;
+        let incluidas = 0;
+        let descartadas = 0;
+
+        for (const archivo of archivos) {
+            const rutaArchivo = path.join(carpetaReportes, archivo);
+            const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const lineas = contenido.split('\n');
+            
+            if (!encabezados) {
+                encabezados = lineas[0];
+                datosCombinados.push(encabezados);
+            }
+            
+            const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+            const fechaIndex = columnas.findIndex(col => col === 'fechaCierre');
+            const origenIndex = columnas.findIndex(col => col === 'origen');
+            const nombrePlantillaIndex = columnas.findIndex(col => col === 'nombrePlantilla');
+            
+            console.log(`[consolidarCampañas] Índices - fechaCierre: ${fechaIndex}, origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
+            
+            for (let i = 1; i < lineas.length; i++) {
+                const linea = lineas[i].trim();
+                if (!linea) continue;
+                
+                try {
+                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                    
+                    // Verificar que sea un ticket de plantilla
+                    if (origenIndex !== -1 && valores[origenIndex] !== 'plantilla') {
+                        descartadas++;
+                        console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - no es de plantilla`);
+                        continue;
+                    }
+                    
+                    // Filtrar por nombre de campaña si se especifica
+                    if (nombreCampaña && nombrePlantillaIndex !== -1) {
+                        const nombrePlantilla = valores[nombrePlantillaIndex];
+                        if (nombrePlantilla !== nombreCampaña) {
+                            descartadas++;
+                            console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - campaña no coincide: ${nombrePlantilla} vs ${nombreCampaña}`);
+                            continue;
+                        }
+                    }
+                    
+                    // Filtrar por fechas si se especifican
+                    if (fechas && fechaIndex !== -1) {
+                        const fecha = valores[fechaIndex];
+                        console.log(`[consolidarCampañas] Procesando línea ${i}, fechaCierre: '${fecha}'`);
+                        
+                        if (fechaEnRango(fecha, fechas)) {
+                            incluidas++;
+                            datosCombinados.push(linea);
+                            console.log(`[consolidarCampañas] Línea ${i} INCLUIDA`);
+                        } else {
+                            descartadas++;
+                            console.log(`[consolidarCampañas] Línea ${i} DESCARTADA - fecha fuera de rango`);
+                        }
+                    } else {
+                        datosCombinados.push(linea);
+                        incluidas++;
+                    }
+                } catch (error) {
+                    console.warn(`[consolidarCampañas] Error procesando línea ${i}:`, error.message);
+                    descartadas++;
+                }
+            }
+        }
+
+        console.log(`[consolidarCampañas] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+        
+        if (datosCombinados.length <= 1) {
+            console.log('[consolidarCampañas] No hay datos después del filtrado.');
+            return null;
+        }
+
+        // Generar archivo consolidado
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        const nombreArchivo = nombreCampaña 
+            ? `campaña_${nombreCampaña}_${hora}_${fecha}.csv`
+            : `campañas_consolidado_${hora}_${fecha}.csv`;
+        const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
+        
+        fs.writeFileSync(rutaConsolidada, datosCombinados.join('\n'));
+        console.log('[consolidarCampañas] Archivo consolidado generado:', rutaConsolidada);
+        
+        return rutaConsolidada;
+    } catch (error) {
+        console.error('[consolidarCampañas] Error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Obtiene la lista de campañas disponibles para filtrado
+ * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
+ * @returns {Array} - Lista de nombres de campañas únicos
+ */
+const obtenerCampañasDisponibles = (directorio) => {
+    try {
+        console.log(`[obtenerCampañasDisponibles] Buscando campañas en directorio: ${directorio}`);
+        
+        // Buscar archivos CSV de tickets en la carpeta de reportes
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        if (!fs.existsSync(carpetaReportes)) {
+            console.log('[obtenerCampañasDisponibles] No existe carpeta de reportes');
+            return [];
+        }
+
+        const archivos = fs.readdirSync(carpetaReportes)
+            .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
+
+        console.log('[obtenerCampañasDisponibles] Archivos de tickets encontrados:', archivos);
+
+        if (archivos.length === 0) {
+            console.log('[obtenerCampañasDisponibles] No hay archivos de tickets');
+            return [];
+        }
+
+        const campañas = new Set();
+
+        for (const archivo of archivos) {
+            const rutaArchivo = path.join(carpetaReportes, archivo);
+            const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const lineas = contenido.split('\n');
+            
+            if (lineas.length < 2) continue; // Solo encabezados
+            
+            const encabezados = lineas[0];
+            const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+            const origenIndex = columnas.findIndex(col => col === 'origen');
+            const nombrePlantillaIndex = columnas.findIndex(col => col === 'nombrePlantilla');
+            
+            console.log(`[obtenerCampañasDisponibles] Índices - origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
+            
+            for (let i = 1; i < lineas.length; i++) {
+                const linea = lineas[i].trim();
+                if (!linea) continue;
+                
+                try {
+                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
+                    
+                    // Verificar que sea un ticket de plantilla
+                    if (origenIndex !== -1 && valores[origenIndex] === 'plantilla') {
+                        // Agregar nombre de plantilla si existe
+                        if (nombrePlantillaIndex !== -1 && valores[nombrePlantillaIndex]) {
+                            const nombrePlantilla = valores[nombrePlantillaIndex];
+                            if (nombrePlantilla && nombrePlantilla !== '') {
+                                campañas.add(nombrePlantilla);
+                                console.log(`[obtenerCampañasDisponibles] Campaña encontrada: ${nombrePlantilla}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`[obtenerCampañasDisponibles] Error procesando línea ${i}:`, error.message);
+                }
+            }
+        }
+
+        const listaCampañas = Array.from(campañas).sort();
+        console.log(`[obtenerCampañasDisponibles] Total campañas encontradas: ${listaCampañas.length}`);
+        console.log(`[obtenerCampañasDisponibles] Lista de campañas:`, listaCampañas);
+        
+        return listaCampañas;
+    } catch (error) {
+        console.error('[obtenerCampañasDisponibles] Error:', error);
+        return [];
     }
 };
 
@@ -661,9 +865,10 @@ const procesarEventos = async (jsonData, outputPath) => {
  * Procesa tickets y los convierte a CSV con estructura limpia
  * @param {Object|Array} jsonData - Datos JSON del webhook
  * @param {string} outputPath - Ruta donde guardar el CSV
+ * @param {Map} plantillasRegistradas - Mapa de plantillas registradas para determinar origen
  * @returns {Promise<string>} - Ruta del archivo generado
  */
-const procesarTickets = async (jsonData, outputPath) => {
+const procesarTickets = async (jsonData, outputPath, plantillasRegistradas = new Map()) => {
     try {
         const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
         
@@ -671,6 +876,11 @@ const procesarTickets = async (jsonData, outputPath) => {
             // Acceder correctamente a los campos anidados
             const content = ticket.content || {};
             const metadata = ticket.metadata || {};
+            
+            // Determinar origen del ticket
+            const campaignId = content.CampaignId || metadata['#activecampaign.flowId'] || '';
+            const esDePlantilla = campaignId && plantillasRegistradas.has(campaignId);
+            const infoPlantilla = esDePlantilla ? plantillasRegistradas.get(campaignId) : null;
             
             const ticketLimpio = {
                 // Campos básicos del ticket
@@ -685,8 +895,15 @@ const procesarTickets = async (jsonData, outputPath) => {
                 timestamp: metadata['#wa.timestamp'] || ticket.timestamp || '',
                 
                 // Campos de estado (se actualizarán cuando se cierre)
-                estadoTicket: 'abierto',
-                fechaCierre: '',
+                estadoTicket: ticket.estadoTicket || 'abierto',
+                fechaCierre: ticket.fechaCierre || '',
+                tipoCierre: ticket.tipoCierre || '',
+                
+                // Campos de origen (BOT vs Plantilla)
+                origen: esDePlantilla ? 'plantilla' : 'bot',
+                nombrePlantilla: infoPlantilla ? infoPlantilla.nombrePlantilla : '',
+                campaignId: campaignId,
+                campaignName: infoPlantilla ? infoPlantilla.campaignName : '',
                 
                 // Campos de sistema
                 fechaFiltro: obtenerFechaFiltro(ticket),
@@ -699,7 +916,8 @@ const procesarTickets = async (jsonData, outputPath) => {
 
         const campos = [
             'id', 'sequentialId', 'status', 'team', 'unreadMessages',
-            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre',
+            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+            'origen', 'nombrePlantilla', 'campaignId', 'campaignName',
             'fechaFiltro', 'tipoDato', 'procesadoEn'
         ];
         
@@ -715,6 +933,93 @@ const procesarTickets = async (jsonData, outputPath) => {
         return outputPath;
     } catch (error) {
         throw new Error(`Error al procesar tickets: ${error.message}`);
+    }
+};
+
+/**
+ * Procesa plantillas y las convierte a CSV con estructura limpia
+ * @param {Object|Array} jsonData - Datos JSON del webhook
+ * @param {string} outputPath - Ruta donde guardar el CSV
+ * @returns {Promise<string>} - Ruta del archivo generado
+ */
+const procesarPlantillas = async (jsonData, outputPath) => {
+    try {
+        const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+        
+        const plantillasProcesadas = dataArray.map(plantilla => {
+            const content = plantilla.content || {};
+            const template = content.template || {};
+            const templateContent = content.templateContent || {};
+            const metadata = plantilla.metadata || {};
+            
+            // Extraer parámetros
+            const parametros = [];
+            if (template.components) {
+                const bodyComponent = template.components.find(comp => comp.type === 'body');
+                if (bodyComponent && bodyComponent.parameters) {
+                    parametros.push(...bodyComponent.parameters.map(param => param.text || ''));
+                }
+            }
+            
+            // Extraer contenido de la plantilla
+            let contenidoPlantilla = '';
+            if (templateContent.components) {
+                const bodyComponent = templateContent.components.find(comp => comp.type === 'BODY');
+                if (bodyComponent && bodyComponent.text) {
+                    contenidoPlantilla = bodyComponent.text;
+                }
+            }
+            
+            const plantillaLimpia = {
+                // Campos básicos de la plantilla
+                id: plantilla.id || '',
+                nombrePlantilla: template.name || templateContent.name || '',
+                tipo: content.type || '',
+                language: template.language?.code || templateContent.language || '',
+                
+                // Campos de contenido
+                contenidoPlantilla: contenidoPlantilla,
+                parametros: parametros.join('|'),
+                numeroParametros: parametros.length,
+                
+                // Campos de metadatos
+                storageDate: metadata['#envelope.storageDate'] || plantilla.storageDate || '',
+                timestamp: metadata['#date_processed'] || metadata['date_created'] || plantilla.timestamp || '',
+                
+                // Campos de ActiveCampaign
+                campaignId: metadata['#activecampaign.flowId'] || '',
+                campaignName: metadata['#activecampaign.name'] || '',
+                stateId: metadata['#activecampaign.stateId'] || '',
+                masterState: metadata['#activecampaign.masterState'] || '',
+                
+                // Campos de sistema
+                fechaFiltro: obtenerFechaFiltro(plantilla),
+                tipoDato: 'plantilla',
+                procesadoEn: new Date().toISOString()
+            };
+            
+            return plantillaLimpia;
+        });
+
+        const campos = [
+            'id', 'nombrePlantilla', 'tipo', 'language', 'contenidoPlantilla', 
+            'parametros', 'numeroParametros', 'storageDate', 'timestamp',
+            'campaignId', 'campaignName', 'stateId', 'masterState',
+            'fechaFiltro', 'tipoDato', 'procesadoEn'
+        ];
+        
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(plantillasProcesadas);
+        
+        const dir = path.dirname(outputPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        fs.writeFileSync(outputPath, csv);
+        return outputPath;
+    } catch (error) {
+        throw new Error(`Error al procesar plantillas: ${error.message}`);
     }
 };
 
@@ -832,5 +1137,8 @@ module.exports = {
     procesarMensajes,
     procesarContactos,
     procesarEventos,
-    procesarTickets
+    procesarTickets,
+    procesarPlantillas,
+    consolidarCampañas,
+    obtenerCampañasDisponibles
 }; 
