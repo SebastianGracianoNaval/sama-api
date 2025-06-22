@@ -72,7 +72,7 @@ const handleWebhook = async (req, res) => {
         }
 
         // --- LÓGICA ESPECIAL PARA TICKETS (tracking de conversaciones) ---
-        if (tipo === 'ticket' || tipo === 'mensaje' || tipo === 'evento') {
+        if (tipo === 'ticket' || tipo === 'mensaje') { // Ya no procesamos eventos para cierre
             // Función para extraer el número de teléfono del contacto
             const extraerContacto = (obj) => {
                 const campos = [
@@ -113,7 +113,7 @@ const handleWebhook = async (req, res) => {
                     }
                 }
 
-                // Si ya existe un ticket para este contacto, procesar mensajes y eventos
+                // Si ya existe un ticket para este contacto, procesar mensajes
                 const ticketInfo = ticketsAbiertos.get(contacto);
                 if (ticketInfo && !ticketInfo.cerrado) {
                     // Agregar mensajes
@@ -121,35 +121,7 @@ const handleWebhook = async (req, res) => {
                         ticketInfo.mensajes.push(item);
                     }
                     
-                    // Agregar eventos y verificar cierre
-                    if (tipo === 'evento') {
-                        ticketInfo.eventos.push(item);
-                        
-                        // Verificar si es un evento de cierre
-                        const prevName = (item['extras.#previousStateName'] || '').toLowerCase();
-                        const prevId = (item['extras.#previousStateId'] || '').toLowerCase();
-                        const action = (item['action'] || '').toLowerCase();
-                        
-                        if (prevName.includes('atendimento humano') || 
-                            prevName.includes('atencion humana') || 
-                            prevId.startsWith('desk') || 
-                            action.includes('encuesta')) {
-                            
-                            ticketInfo.cerrado = true;
-                            ticketInfo.fechaCierre = item['storageDate'] || item['fechaFiltro'];
-                            console.log(`[Ticket] Caja CERRADA para contacto ${contacto} (seqId: ${ticketInfo.ticket['content.sequentialId']})`);
-                            
-                            // Generar archivo individual del ticket con conversación
-                            try {
-                                const carpeta = obtenerRutaCarpeta('ticket');
-                                const rutaCarpeta = path.join(__dirname, '..', carpeta);
-                                generarTicketIndividual(ticketInfo, rutaCarpeta);
-                                console.log(`[Ticket] Archivo individual generado para contacto ${contacto}`);
-                            } catch (error) {
-                                console.error(`[Ticket] Error al generar archivo individual para contacto ${contacto}:`, error);
-                            }
-                        }
-                    }
+                    // Se elimina la lógica de cierre por eventos de aquí
                 }
             }
         }

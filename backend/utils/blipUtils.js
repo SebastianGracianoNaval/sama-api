@@ -53,45 +53,14 @@ const obtenerRutaCarpeta = (tipo) => {
  * @returns {string} - El nombre del archivo
  */
 const generarNombreArchivo = (tipo) => {
-    const now = new Date();
-    const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-    const fecha = now.toISOString().slice(0,10);
+    const ahora = new Date();
+    const hora = ahora.toTimeString().slice(0,8).replace(/:/g, '-');
+    const fecha = ahora.toISOString().slice(0,10);
     return `${tipo}_${hora}_${fecha}.csv`;
-};
-
-/**
- * Detecta si un ticket está cerrado basado en patrones de cierre o timeout
- * @param {Object} ticket - Objeto de ticket a analizar
- * @returns {Object} - Objeto con { cerrado: boolean, fechaCierre: string | null }
- */
-const detectarCierreTicket = (ticket) => {
-    let cerrado = false;
-    let fechaCierre = null;
-    if (ticket.extras) {
-        const prevState = ticket.extras['#previousStateName']?.toLowerCase() || '';
-        const prevStateId = ticket.extras['#previousStateId'] || '';
-        if (prevState.includes('atendimento humano') || prevState.includes('atencion humana') || prevStateId.startsWith('desk')) {
-            cerrado = true;
-            fechaCierre = ticket.storageDate || ticket['metadata.#envelope.storageDate'] || ticket.fechaFiltro;
-            console.log('===================TICKET CERRADO===============');
-        }
-    }
-    return { cerrado, fechaCierre };
-};
-
-// Agregar validación para no exportar tickets abiertos
-const validarTicketCerrado = (ticket) => {
-    const { cerrado } = detectarCierreTicket(ticket);
-    if (!cerrado) {
-        throw new Error('No se puede exportar un ticket que no está cerrado.');
-    }
-    return true;
 };
 
 module.exports = {
     identificarTipoJson,
     obtenerRutaCarpeta,
-    generarNombreArchivo,
-    detectarCierreTicket,
-    validarTicketCerrado
+    generarNombreArchivo
 }; 
