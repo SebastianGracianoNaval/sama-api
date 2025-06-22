@@ -589,67 +589,42 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
 
 /**
  * Obtiene la lista de campanas disponibles para filtrado
- * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
+ * @param {string} directorioPlantillas - Ruta del directorio que contiene los archivos CSV de plantillas
  * @returns {Array} - Lista de nombres de campanas únicos
  */
-const obtenerCampanasDisponibles = (directorio) => {
+const obtenerCampanasDisponibles = (directorioPlantillas) => {
     try {
-        console.log(`[obtenerCampanasDisponibles] Buscando campanas en directorio: ${directorio}`);
+        console.log(`[obtenerCampanasDisponibles] Buscando plantillas en directorio: ${directorioPlantillas}`);
         
-        // Buscar archivos CSV de tickets en la carpeta de reportes
-        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
-        if (!fs.existsSync(carpetaReportes)) {
-            console.log('[obtenerCampanasDisponibles] No existe carpeta de reportes, creando...');
-            fs.mkdirSync(carpetaReportes, { recursive: true });
+        if (!fs.existsSync(directorioPlantillas)) {
+            console.log('[obtenerCampanasDisponibles] No existe carpeta de plantillas, creando...');
+            fs.mkdirSync(directorioPlantillas, { recursive: true });
             return [];
         }
 
-        const archivos = fs.readdirSync(carpetaReportes)
-            .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
+        const archivos = fs.readdirSync(directorioPlantillas)
+            .filter(archivo => archivo.startsWith('plantilla_') && archivo.endsWith('.csv'));
 
-        console.log('[obtenerCampanasDisponibles] Archivos de tickets encontrados:', archivos);
+        console.log('[obtenerCampanasDisponibles] Archivos de plantillas encontrados:', archivos);
 
         if (archivos.length === 0) {
-            console.log('[obtenerCampanasDisponibles] No hay archivos de tickets');
+            console.log('[obtenerCampanasDisponibles] No hay archivos de plantillas');
             return [];
         }
 
         const campanas = new Set();
 
         for (const archivo of archivos) {
-            const rutaArchivo = path.join(carpetaReportes, archivo);
+            const rutaArchivo = path.join(directorioPlantillas, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
-            const lineas = contenido.split('\n');
+            const registros = parse(contenido, {
+                columns: true,
+                skip_empty_lines: true
+            });
             
-            if (lineas.length < 2) continue; // Solo encabezados
-            
-            const encabezados = lineas[0];
-            const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-            const origenIndex = columnas.findIndex(col => col === 'origen');
-            const nombrePlantillaIndex = columnas.findIndex(col => col === 'nombrePlantilla');
-            
-            console.log(`[obtenerCampanasDisponibles] Índices - origen: ${origenIndex}, nombrePlantilla: ${nombrePlantillaIndex}`);
-            
-            for (let i = 1; i < lineas.length; i++) {
-                const linea = lineas[i].trim();
-                if (!linea) continue;
-                
-                try {
-                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    
-                    // Verificar que sea un ticket de plantilla
-                    if (origenIndex !== -1 && valores[origenIndex] === 'plantilla') {
-                        // Agregar nombre de plantilla si existe
-                        if (nombrePlantillaIndex !== -1 && valores[nombrePlantillaIndex]) {
-                            const nombrePlantilla = valores[nombrePlantillaIndex];
-                            if (nombrePlantilla && nombrePlantilla !== '') {
-                                campanas.add(nombrePlantilla);
-                                console.log(`[obtenerCampanasDisponibles] Campana encontrada: ${nombrePlantilla}`);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.warn(`[obtenerCampanasDisponibles] Error procesando línea ${i}:`, error.message);
+            for (const registro of registros) {
+                if (registro.nombrePlantilla) {
+                    campanas.add(registro.nombrePlantilla);
                 }
             }
         }
@@ -868,21 +843,30 @@ const procesarEventos = async (jsonData, outputPath) => {
  * @param {Object|Array} jsonData - Datos JSON del webhook
  * @param {string} outputPath - Ruta donde guardar el CSV
  * @param {Map} plantillasRegistradas - Mapa de plantillas registradas para determinar origen
+ * @param {Map} contactCampaignInfo - Mapa con información de campañas por contacto
  * @returns {Promise<string>} - Ruta del archivo generado
  */
-const procesarTickets = async (jsonData, outputPath, plantillasRegistradas = new Map()) => {
+const procesarTickets = async (jsonData, outputPath, plantillasRegistradas = new Map(), contactCampaignInfo = new Map()) => {
     try {
         const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
         
         const ticketsProcesados = dataArray.map(ticket => {
-            // Acceder correctamente a los campos anidados
             const content = ticket.content || {};
             const metadata = ticket.metadata || {};
             
-            // Determinar origen del ticket
-            const campaignId = content.CampaignId || metadata['#activecampaign.flowId'] || '';
-            const esDePlantilla = campaignId && plantillasRegistradas.has(campaignId);
-            const infoPlantilla = esDePlantilla ? plantillasRegistradas.get(campaignId) : null;
+            // Determinar origen del ticket usando el nuevo mapa contactCampaignInfo
+            const contactIdentity = ticket.from; // El 'from' en el ticket es el customer
+            const campaignInfo = contactCampaignInfo.get(contactIdentity);
+
+            let origen = 'bot';
+            let nombrePlantilla = '';
+            let agenteEnvio = '';
+            
+            if (campaignInfo) {
+                origen = 'plantilla';
+                nombrePlantilla = campaignInfo.templateName;
+                agenteEnvio = campaignInfo.originator;
+            }
             
             const ticketLimpio = {
                 // Campos básicos del ticket
@@ -902,10 +886,9 @@ const procesarTickets = async (jsonData, outputPath, plantillasRegistradas = new
                 tipoCierre: ticket.tipoCierre || '',
                 
                 // Campos de origen (BOT vs Plantilla)
-                origen: esDePlantilla ? 'plantilla' : 'bot',
-                nombrePlantilla: infoPlantilla ? infoPlantilla.nombrePlantilla : '',
-                campaignId: campaignId,
-                campaignName: infoPlantilla ? infoPlantilla.campaignName : '',
+                origen: origen,
+                nombrePlantilla: nombrePlantilla,
+                agenteEnvio: agenteEnvio,
                 
                 // Campos de sistema
                 fechaFiltro: obtenerFechaFiltro(ticket),
@@ -919,7 +902,7 @@ const procesarTickets = async (jsonData, outputPath, plantillasRegistradas = new
         const campos = [
             'id', 'sequentialId', 'status', 'team', 'unreadMessages',
             'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
-            'origen', 'nombrePlantilla', 'campaignId', 'campaignName',
+            'origen', 'nombrePlantilla', 'agenteEnvio',
             'fechaFiltro', 'tipoDato', 'procesadoEn'
         ];
         

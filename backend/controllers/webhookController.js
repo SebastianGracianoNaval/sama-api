@@ -18,6 +18,9 @@ const fs = require('fs');
 // Mapa global para mantener tickets abiertos por contacto
 const ticketsAbiertos = new Map();
 
+// Mapa global para registrar información de campañas por contacto
+const contactCampaignInfo = new Map();
+
 // Mapa global para mantener plantillas registradas por campaignId
 const plantillasRegistradas = new Map();
 
@@ -65,13 +68,21 @@ const handleWebhook = async (req, res) => {
                 rutaArchivo = await procesarMensajes(jsonData, outputPath);
                 break;
             case 'contacto':
+                // Si es un contacto, verificar si trae info de campaña
+                if (jsonData.extras && jsonData.extras.campaignMessageTemplate) {
+                    contactCampaignInfo.set(jsonData.identity, {
+                        templateName: jsonData.extras.campaignMessageTemplate,
+                        originator: jsonData.extras.campaignOriginator || ''
+                    });
+                    console.log(`[Webhook] Info de campaña guardada para contacto ${jsonData.identity}: Template=${jsonData.extras.campaignMessageTemplate}`);
+                }
                 rutaArchivo = await procesarContactos(jsonData, outputPath);
                 break;
             case 'evento':
                 rutaArchivo = await procesarEventos(jsonData, outputPath);
                 break;
             case 'ticket':
-                rutaArchivo = await procesarTickets(jsonData, outputPath, plantillasRegistradas);
+                rutaArchivo = await procesarTickets(jsonData, outputPath, plantillasRegistradas, contactCampaignInfo);
                 break;
             case 'plantilla':
                 rutaArchivo = await procesarPlantillas(jsonData, outputPath);

@@ -18,7 +18,7 @@ const drawerWidth = 220;
 
 const reportTypes = [
   { label: 'Tickets', icon: <AssignmentIcon /> },
-  { label: 'Campanas', icon: <DescriptionIcon /> },
+  { label: 'Campañas', icon: <DescriptionIcon /> },
 ];
 
 const ReportesLayout = () => {
@@ -119,8 +119,8 @@ const ReportesLayout = () => {
 
       if (selected === 'Tickets') {
         response = await reportService.downloadTickets(fechaInicio, fechaFin);
-        filename = `tickets_consolidados_${hora}_${fecha}.csv`;
-      } else if (selected === 'Campanas') {
+        filename = `reporte_tickets_${hora}_${fecha}.zip`;
+      } else if (selected === 'Campañas') {
         const plantillaParam = nombrePlantilla === 'Todas las plantillas' ? '' : nombrePlantilla;
         response = await reportService.downloadCampanas(fechaInicio, fechaFin, plantillaParam);
         filename = plantillaParam 
@@ -211,7 +211,7 @@ const ReportesLayout = () => {
         <Box sx={{ mb: 3, display: selected ? 'block' : 'none' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0, mb: 1, pb: 1, borderBottom: theme => `1.5px solid ${theme.palette.mode === 'dark' ? '#23272F' : '#e0e0e0'}` }}>
             {selected === 'Tickets' && <AssignmentIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
-            {selected === 'Campanas' && <DescriptionIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
+            {selected === 'Campañas' && <DescriptionIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
             <Typography
               variant="h4"
               fontWeight={700}
@@ -222,11 +222,11 @@ const ReportesLayout = () => {
                 mb: 0,
               }}
             >
-              {selected === 'Tickets' ? 'Tus tickets' : selected === 'Campanas' ? 'Tus campanas' : ''}
+              {selected === 'Tickets' ? 'Tus tickets' : selected === 'Campañas' ? 'Tus campañas' : ''}
             </Typography>
           </Box>
           <Typography variant="subtitle1" sx={{ color: theme => theme.palette.mode === 'dark' ? '#B0B0B0' : '#666', mb: 2, ml: 0, pl: 0, textAlign: 'left' }}>
-            {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : selected === 'Campanas' ? 'Descargá tus campanas y plantillas filtrando por fecha y nombre.' : ''}
+            {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : selected === 'Campañas' ? 'Descargá tus campañas y plantillas filtrando por fecha y nombre.' : ''}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <TextField
@@ -259,7 +259,7 @@ const ReportesLayout = () => {
               }}
               inputProps={{ max: new Date().toISOString().slice(0, 10) }}
             />
-            {selected === 'Campanas' && (
+            {selected === 'Campañas' && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <FormControl size="small" sx={{ minWidth: 220 }}>
                   <InputLabel>Nombre de Plantilla</InputLabel>
