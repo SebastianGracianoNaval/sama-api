@@ -517,7 +517,7 @@ app.get('/api/campanas', async (req, res) => {
     }
 });
 
-// Ruta para descargar reporte de campanas (solo tickets de plantilla)
+// Ruta para descargar reporte de campanas (detallado)
 app.get('/descargar/campanas', async (req, res) => {
     const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
     try {
@@ -528,7 +528,6 @@ app.get('/descargar/campanas', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
         }
         
-        // Usar la nueva función de consolidación que solo incluye tickets de plantilla
         const carpeta = obtenerRutaCarpeta('ticket');
         const pathCarpeta = path.join(__dirname, carpeta);
         
@@ -537,18 +536,18 @@ app.get('/descargar/campanas', async (req, res) => {
             return res.status(404).json({ success: false, message: 'No hay datos de tickets disponibles.' });
         }
 
-        // Llamar a la función de consolidación de campanas
-        const rutaConsolidada = await consolidarCampanas(pathCarpeta, fechas, nombrePlantilla);
+        // La función ahora devuelve un objeto { filePath, data }
+        const resultado = await consolidarCampanas(pathCarpeta, fechas, nombrePlantilla);
         
-        if (!rutaConsolidada) {
+        if (!resultado || !resultado.filePath) {
             return res.status(404).json({ success: false, message: 'No hay datos de campañas para los filtros seleccionados.' });
         }
 
-        // Descargar el archivo consolidado
-        const nombreArchivo = path.basename(rutaConsolidada);
+        // Descargar el archivo consolidado usando la ruta del resultado
+        const nombreArchivo = path.basename(resultado.filePath);
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
-        res.download(rutaConsolidada);
+        res.download(resultado.filePath);
 
     } catch (error) {
         console.error(`[DESCARGAR/CAMPANAS] Error:`, error);
@@ -564,16 +563,33 @@ app.get('/descargar/campanas', async (req, res) => {
 app.get('/descargar/campanas/resumen', async (req, res) => {
     const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
     try {
-        const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
-        const baseDir = path.join(__dirname, 'data', 'tickets');
-        const rutaCsv = await generarResumenDeCampanas(baseDir, fechas, nombrePlantilla);
-        if (!rutaCsv) {
-            return res.status(404).json({ success: false, message: 'No hay datos para el resumen solicitado.' });
+        const fechas = (fechaInicio && fechaFin) ? validarFechas(fechaInicio, fechaFin) : null;
+        if ((fechaInicio && fechaFin) && !fechas) {
+            return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
         }
-        const nombreArchivo = path.basename(rutaCsv);
+
+        const baseDir = path.join(__dirname, 'data', 'tickets');
+        
+        // 1. Obtener los datos consolidados y filtrados llamando a la función del reporte detallado
+        const resultadoDetalle = await consolidarCampanas(baseDir, fechas, nombrePlantilla);
+        
+        if (!resultadoDetalle || !resultadoDetalle.data || resultadoDetalle.data.length === 0) {
+            return res.status(404).json({ success: false, message: 'No hay datos para generar el resumen con los filtros seleccionados.' });
+        }
+
+        // 2. Construir el string del período y generar el resumen
+        const periodo = fechas ? `${fechas.fechaInicio} al ${fechas.fechaFin}` : 'No especificado';
+        const rutaCsvResumen = await generarResumenDeCampanas(resultadoDetalle.data, baseDir, periodo);
+
+        if (!rutaCsvResumen) {
+            return res.status(500).json({ success: false, message: 'No se pudo generar el archivo de resumen.' });
+        }
+        
+        const nombreArchivo = path.basename(rutaCsvResumen);
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
-        res.download(rutaCsv);
+        res.download(rutaCsvResumen);
+
     } catch (error) {
         console.error('[DESCARGAR/CAMPANAS/RESUMEN] Error:', error);
         res.status(500).json({ success: false, message: 'Error al generar el resumen de campañas.', error: error.message });
