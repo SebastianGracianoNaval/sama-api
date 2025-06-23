@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Button, 
@@ -6,7 +6,6 @@ import {
   Paper,
   List,
   ListItem,
-  ListItemText,
   Chip,
   IconButton,
   useTheme

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, 
   Toolbar, Typography, Divider, useTheme, Paper, Button, TextField,
-  FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, CssBaseline
+  IconButton, Tooltip, CssBaseline
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -30,10 +30,6 @@ const ReportesLayout = () => {
   const [downloading, setDownloading] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
-  const [nombrePlantilla, setNombrePlantilla] = useState('Todas las plantillas');
-  
-  const [plantillasList, setPlantillasList] = useState([]);
-  const [loadingPlantillas, setLoadingPlantillas] = useState(false);
 
   const cargarHistorial = () => {
     setLoading(true);
@@ -49,30 +45,13 @@ const ReportesLayout = () => {
       .finally(() => setLoading(false));
   };
 
-  const cargarPlantillas = async () => {
-    setLoadingPlantillas(true);
-    try {
-      const response = await reportService.getCampanasList();
-      if (response.data.success) {
-        setPlantillasList(response.data.campanas);
-      }
-    } catch (error) {
-      console.error('Error al cargar nombres de plantillas:', error);
-      showToast('Error al cargar la lista de plantillas', 'error');
-    } finally {
-      setLoadingPlantillas(false);
-    }
-  };
-
   useEffect(() => {
     cargarHistorial();
-    cargarPlantillas(); 
   }, []);
 
   const handleClearFilters = () => {
     setFechaInicio('');
     setFechaFin('');
-    setNombrePlantilla('Todas las plantillas');
   };
 
   const handleDownload = async (filename) => {
@@ -121,12 +100,6 @@ const ReportesLayout = () => {
       if (selected === 'Tickets') {
         response = await reportService.downloadTickets(fechaInicio, fechaFin);
         filename = `reporte_tickets_${hora}_${fecha}.zip`;
-      } else if (selected === 'Campañas') {
-        const plantillaParam = nombrePlantilla === 'Todas las plantillas' ? '' : nombrePlantilla;
-        response = await reportService.downloadCampanas(fechaInicio, fechaFin, plantillaParam);
-        filename = plantillaParam 
-          ? `campana_${plantillaParam.replace(/ /g, '_')}_${hora}_${fecha}.csv`
-          : `campanas_consolidadas_${hora}_${fecha}.csv`;
       }
       
       saveAs(new Blob([response.data]), filename);
