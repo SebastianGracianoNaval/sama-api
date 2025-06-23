@@ -254,18 +254,17 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             return fa - fb;
         });
         
-        // --- Extraer Primer Contacto del Agente ---
-        const primerMensajeAgente = ticketInfo.mensajes.find(m => {
+        // --- Extraer Primer Contacto del Cliente ---
+        const primerMensajeCliente = ticketInfo.mensajes.find(m => {
             const from = m.from || '';
-            const messageEmitter = m.metadata?.['#messageEmitter'];
-            return messageEmitter === 'Human' || (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net'));
+            return from.includes('@wa.gw.msging.net');
         });
 
         let primerContacto = '';
-        if (primerMensajeAgente) {
-            const fecha = primerMensajeAgente['metadata.#envelope.storageDate'] || primerMensajeAgente['storageDate'] || '';
-            const contenido = primerMensajeAgente.content || '';
-            primerContacto = `${fecha} - ${contenido}`;
+        if (primerMensajeCliente) {
+            const fecha = primerMensajeCliente['metadata.#envelope.storageDate'] || primerMensajeCliente['storageDate'] || '';
+            const contenido = primerMensajeCliente.content || '';
+            primerContacto = fecha ? `${fecha} - ${contenido}` : contenido;
         }
         
         // Crear conversación con formato [agente]: y [cliente]:
@@ -289,7 +288,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             team: content.team || '',
             unreadMessages: content.unreadMessages || 0,
             storageDate: metadata['#envelope.storageDate'] || content.storageDate || '',
-            timestamp: metadata['#wa.timestamp'] || '',
+            timestamp: metadata['#wa.timestamp'] || metadata['#envelope.storageDate'] || content.storageDate || '',
             estadoTicket: 'cerrado',
             fechaCierre: ticketInfo.fechaCierre || '',
             tipoCierre: ticketInfo.tipoCierre || '',
@@ -312,21 +311,14 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             // Usar el nombre real de la plantilla
             ticketData.plantilla = details.templateName || '';
             
-            // Determinar si hubo respuesta: si hay mensajes del cliente O si se generó un ticket (que implica respuesta)
-            const tieneRespuestaCliente = ticketInfo.mensajes.some(m => 
+            // Determinar si hubo respuesta: si hay mensajes del cliente O si el tracking lo indica
+            const huboRespuesta = ticketInfo.mensajes.some(m => 
                 m.from && m.from.endsWith('@wa.gw.msging.net')
-            );
-            const huboRespuesta = tieneRespuestaCliente || ticketInfo.mensajes.length > 0;
+            ) || details.replied;
             ticketData.respuesta = huboRespuesta ? 'TRUE' : 'FALSE';
             
-            // Usar el contenido de respuesta del cliente si existe, sino usar el contenido de la plantilla con variables
-            if (huboRespuesta && details.replyContent) {
-                ticketData.contenido = details.replyContent;
-            } else if (details.templateContentWithParams) {
-                ticketData.contenido = details.templateContentWithParams;
-            } else {
-                ticketData.contenido = details.templateContent || '';
-            }
+            // Usar el contenido de respuesta del cliente si existe, sino el de la plantilla con variables
+            ticketData.contenido = details.replyContent || '';
             
             // Usar el emisor real de la campaña
             ticketData.emisor = details.originator || '';

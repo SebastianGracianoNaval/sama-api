@@ -26,6 +26,27 @@ const campaignTracking = new Map();
 const ticketsAbiertos = new Map();
 
 /**
+ * Función para extraer la identidad del contacto de un objeto de webhook
+ * @param {Object} obj - El objeto del webhook
+ * @returns {string|null} - La identidad completa del contacto (e.g., '54911...@wa.gw.msging.net')
+ */
+const extraerContactoIdentity = (obj) => {
+    const campos = [
+        obj['from'],
+        obj['to'],
+        obj['identity'],
+        obj['customerIdentity']
+    ].filter(Boolean);
+
+    for (const campo of campos) {
+        if (typeof campo === 'string' && campo.endsWith('@wa.gw.msging.net')) {
+            return campo; // Devuelve la identidad completa
+        }
+    }
+    return null;
+};
+
+/**
  * Construye el contenido de la plantilla reemplazando las variables
  * @param {string} templateText - Texto de la plantilla con placeholders {{1}}, {{2}}, etc.
  * @param {Array} parameters - Array de parámetros para reemplazar
@@ -188,40 +209,21 @@ const handleWebhook = async (req, res) => {
 
         // --- LÓGICA MEJORADA PARA TICKETS (tracking de conversaciones) ---
         if (tipo === 'ticket' || tipo === 'mensaje') {
-            // Función para extraer el número de teléfono del contacto
-            const extraerContacto = (obj) => {
-                const campos = [
-                    obj['from'],
-                    obj['to'],
-                    obj['identity']
-                ].filter(Boolean);
-
-                for (const campo of campos) {
-                    if (campo && campo.endsWith('@wa.gw.msging.net')) {
-                        const numero = campo.split('@')[0];
-                        if (/^\d+$/.test(numero)) {
-                            return numero;
-                        }
-                    }
-                }
-                return null;
-            };
-
             // Procesar cada elemento del webhook para tracking de tickets
             const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
             for (const item of dataArray) {
-                const contacto = extraerContacto(item);
-                if (!contacto) continue;
+                const contactoIdentity = extraerContactoIdentity(item);
+                if (!contactoIdentity) continue;
 
                 // Si es un ticket de apertura
                 if (tipo === 'ticket' && item['type'] === 'application/vnd.iris.ticket+json') {
-                    if (!ticketsAbiertos.has(contacto) || ticketsAbiertos.get(contacto).cerrado) {
+                    if (!ticketsAbiertos.has(contactoIdentity) || ticketsAbiertos.get(contactoIdentity).cerrado) {
                         const content = item.content || {};
                         const metadata = item.metadata || {};
                         const fechaApertura = metadata['#envelope.storageDate'] || content.storageDate || item.storageDate || new Date().toISOString();
 
                         // MEJORADA: Determinar si es un ticket de campaña usando múltiples criterios
-                        const campaignDetails = campaignTracking.get(contacto);
+                        const campaignDetails = campaignTracking.get(contactoIdentity);
                         let ticketType = 'BOT';
                         
                         // Criterio 1: Si hay tracking de campaña para este contacto
@@ -233,7 +235,7 @@ const handleWebhook = async (req, res) => {
                             ticketType = 'PLANTILLA';
                             // Si no teníamos tracking, crear uno básico
                             if (!campaignDetails) {
-                                campaignTracking.set(contacto, {
+                                campaignTracking.set(contactoIdentity, {
                                     templateName: 'Plantilla sin nombre',
                                     originator: '',
                                     sentTime: fechaApertura,
@@ -251,20 +253,20 @@ const handleWebhook = async (req, res) => {
                             ticketType = 'PLANTILLA';
                         }
 
-                        const finalCampaignDetails = campaignTracking.get(contacto);
+                        const finalCampaignDetails = campaignTracking.get(contactoIdentity);
                         
-                        ticketsAbiertos.set(contacto, {
+                        ticketsAbiertos.set(contactoIdentity, {
                             ticket: item,
                             mensajes: [],
                             eventos: [],
                             cerrado: false,
                             fechaCierre: null,
                             fechaApertura: fechaApertura,
-                            contacto: contacto,
+                            contacto: contactoIdentity.split('@')[0], // Guardar solo el número para la columna 'contacto'
                             tipo: ticketType,
                             campaignDetails: finalCampaignDetails || null,
                         });
-                        console.log(`[Ticket] Caja ABIERTA para contacto ${contacto} (seqId: ${content.sequentialId}) - Tipo: ${ticketType}`, {
+                        console.log(`[Ticket] Caja ABIERTA para contacto ${contactoIdentity} (seqId: ${content.sequentialId}) - Tipo: ${ticketType}`, {
                             campaignDetails: finalCampaignDetails ? {
                                 templateName: finalCampaignDetails.templateName,
                                 originator: finalCampaignDetails.originator,
@@ -276,13 +278,13 @@ const handleWebhook = async (req, res) => {
                         
                         // Una vez que el ticket se abre, podemos limpiar el tracking para este contacto
                         if (finalCampaignDetails) {
-                            campaignTracking.delete(contacto);
+                            campaignTracking.delete(contactoIdentity);
                         }
                     }
                 }
 
                 // Si ya existe un ticket para este contacto, procesar mensajes
-                const ticketInfo = ticketsAbiertos.get(contacto);
+                const ticketInfo = ticketsAbiertos.get(contactoIdentity);
                 if (ticketInfo && !ticketInfo.cerrado) {
                     // Agregar mensajes
                     if (tipo === 'mensaje') {
@@ -518,15 +520,15 @@ const handleBotEvent = async (req, res) => {
             });
         }
         
-        // Extraer número de teléfono del identity
-        const numeroTelefono = identity.replace('@wa.gw.msging.net', '');
+        // El 'identity' del evento del bot es la clave para encontrar el ticket
+        const contactoIdentity = identity;
         
         // Crear evento del bot con estructura consistente
         const eventoBot = {
             id: `bot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             correoAgente,
             identity,
-            numeroTelefono,
+            numeroTelefono: contactoIdentity.replace('@wa.gw.msging.net', ''),
             ticketFinalizo: ticketFinalizo === 'true' || ticketFinalizo === true,
             tipoEvento,
             tipoCierre: tipoCierre || '',
@@ -542,7 +544,7 @@ const handleBotEvent = async (req, res) => {
         
         // Si es finalización de ticket, buscar el ticket abierto correspondiente
         if (eventoBot.ticketFinalizo) {
-            const ticketInfo = ticketsAbiertos.get(numeroTelefono);
+            const ticketInfo = ticketsAbiertos.get(contactoIdentity);
             if (ticketInfo && !ticketInfo.cerrado) {
                 // Marcar ticket como cerrado
                 ticketInfo.cerrado = true;
@@ -554,7 +556,7 @@ const handleBotEvent = async (req, res) => {
                 const duracion = calcularDuracionTicket(ticketInfo.fechaApertura, ticketInfo.fechaCierre);
                 ticketInfo.duracion = duracion;
                 
-                console.log(`[BotEvent] Ticket cerrado para contacto ${numeroTelefono} por agente ${correoAgente}. Duración: ${duracion}`);
+                console.log(`[BotEvent] Ticket cerrado para contacto ${contactoIdentity} por agente ${correoAgente}. Duración: ${duracion}`);
                 
                 // Generar archivo individual del ticket con información del agente y tipoCierre
                 try {
@@ -567,12 +569,12 @@ const handleBotEvent = async (req, res) => {
                     ticketInfo.tipoCierre = tipoCierre || '';
                     
                     generarTicketIndividual(ticketInfo, rutaCarpeta);
-                    console.log(`[BotEvent] Archivo individual generado para contacto ${numeroTelefono}`);
+                    console.log(`[BotEvent] Archivo individual generado para contacto ${contactoIdentity}`);
                 } catch (error) {
-                    console.error(`[BotEvent] Error al generar archivo individual para contacto ${numeroTelefono}:`, error);
+                    console.error(`[BotEvent] Error al generar archivo individual para contacto ${contactoIdentity}:`, error);
                 }
             } else {
-                console.log(`[BotEvent] No se encontró ticket abierto para contacto ${numeroTelefono}`);
+                console.log(`[BotEvent] No se encontró ticket abierto para contacto ${contactoIdentity}`);
             }
         }
         
@@ -613,7 +615,7 @@ const handleBotEvent = async (req, res) => {
             message: 'Evento del bot procesado correctamente',
             eventoId: eventoBot.id,
             ticketFinalizo: eventoBot.ticketFinalizo,
-            contacto: numeroTelefono,
+            contacto: contactoIdentity,
             // Incluir datos para el frontend
             webhookData: {
                 fecha: new Date().toISOString(),
@@ -693,15 +695,15 @@ const handleCampaignEvent = async (req, res) => {
             });
         }
         
-        // Extraer número de teléfono del identity si no se proporciona
-        const numeroTelefonoFinal = numeroTelefono || identity.replace('@wa.gw.msging.net', '');
+        // La clave para el tracking de campañas es siempre la identidad completa
+        const contactoIdentity = identity;
         
         // Crear evento de campaña con estructura consistente
         const campaignEvent = {
             id: `campaign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             agentePlantilla: agentePlantilla || '',
             identity,
-            numeroTelefono: numeroTelefonoFinal,
+            numeroTelefono: numeroTelefono || contactoIdentity.replace('@wa.gw.msging.net', ''),
             esPlantilla: esPlantilla === true || esPlantilla === 'true',
             respuesta: respuesta || '',
             timestamp: new Date().toISOString(),
@@ -716,7 +718,7 @@ const handleCampaignEvent = async (req, res) => {
         
         // Si es una plantilla, actualizar el tracking de campañas
         if (campaignEvent.esPlantilla) {
-            const campaign = campaignTracking.get(numeroTelefonoFinal) || {};
+            const campaign = campaignTracking.get(contactoIdentity) || {};
             
             // Actualizar con información del agente
             campaign.originator = agentePlantilla;
@@ -728,9 +730,9 @@ const handleCampaignEvent = async (req, res) => {
                 campaign.replyTime = campaignEvent.timestamp;
             }
             
-            campaignTracking.set(numeroTelefonoFinal, campaign);
+            campaignTracking.set(contactoIdentity, campaign);
             
-            console.log(`[CampaignEvent] Tracking actualizado para ${numeroTelefonoFinal}:`, {
+            console.log(`[CampaignEvent] Tracking actualizado para ${contactoIdentity}:`, {
                 originator: campaign.originator,
                 replyContent: campaign.replyContent,
                 replied: campaign.replied,
@@ -772,7 +774,7 @@ const handleCampaignEvent = async (req, res) => {
             message: 'Evento de campaña procesado correctamente',
             eventoId: campaignEvent.id,
             esPlantilla: campaignEvent.esPlantilla,
-            contacto: numeroTelefonoFinal,
+            contacto: contactoIdentity,
             // Incluir datos para el frontend
             webhookData: {
                 fecha: new Date().toISOString(),
