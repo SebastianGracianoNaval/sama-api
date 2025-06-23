@@ -537,8 +537,8 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             console.log(`[consolidarTicketsCsvs] Archivo consolidado PLANTILLA generado: ${rutaConsolidadaPlantilla}`);
         }
         
-        // Retornar la ruta del primer archivo generado (para compatibilidad)
-        return archivosGenerados.length > 0 ? archivosGenerados[0] : null;
+        // Retornar las rutas de los archivos generados
+        return archivosGenerados;
     } catch (error) {
         console.error('[consolidarTicketsCsvs] Error:', error);
         throw error;

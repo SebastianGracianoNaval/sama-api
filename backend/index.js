@@ -443,31 +443,21 @@ app.get('/descargar/tickets', async (req, res) => {
         }
 
         // Usar la nueva función de consolidación que genera archivos separados
-        const carpeta = obtenerRutaCarpeta('ticket');
-        const pathCarpeta = path.join(__dirname, carpeta);
+        const carpetaTickets = obtenerRutaCarpeta('ticket');
+        const pathCarpetaTickets = path.join(__dirname, carpetaTickets);
         
-        if (!fs.existsSync(pathCarpeta)) {
-            fs.mkdirSync(pathCarpeta, { recursive: true });
+        if (!fs.existsSync(pathCarpetaTickets)) {
+            fs.mkdirSync(pathCarpetaTickets, { recursive: true });
             return res.status(404).json({ success: false, message: 'No hay datos de tickets disponibles.' });
         }
 
-        // Llamar a la función de consolidación que genera archivos separados
-        const rutaConsolidada = await consolidarTicketsCsvs(pathCarpeta, fechas);
+        // Llamar a la función de consolidación que ahora devuelve un array de rutas de archivos
+        const archivosConsolidados = await consolidarTicketsCsvs(pathCarpetaTickets, fechas);
         
-        if (!rutaConsolidada) {
+        console.log(`[DESCARGAR/TICKETS] Archivos consolidados generados:`, archivosConsolidados);
+
+        if (!archivosConsolidados || archivosConsolidados.length === 0) {
             return res.status(404).json({ success: false, message: 'No hay tickets para exportar en el período especificado.' });
-        }
-
-        // Buscar los archivos consolidados generados
-        const carpetaReportes = path.join(__dirname, 'data', 'reportes');
-        const archivosConsolidados = fs.readdirSync(carpetaReportes)
-            .filter(archivo => archivo.includes('consolidado') && archivo.includes(new Date().toISOString().slice(0, 10).replace(/-/g, '')))
-            .sort((a, b) => fs.statSync(path.join(carpetaReportes, b)).mtime.getTime() - fs.statSync(path.join(carpetaReportes, a)).mtime.getTime());
-
-        console.log(`[DESCARGAR/TICKETS] Archivos consolidados encontrados:`, archivosConsolidados);
-
-        if (archivosConsolidados.length === 0) {
-            return res.status(404).json({ success: false, message: 'No se encontraron archivos consolidados de tickets.' });
         }
 
         // Crear ZIP con los archivos consolidados
@@ -480,14 +470,22 @@ app.get('/descargar/tickets', async (req, res) => {
         archive.pipe(res);
         
         // Agregar archivos al ZIP
-        for (const archivo of archivosConsolidados) {
-            const rutaArchivo = path.join(carpetaReportes, archivo);
-            const nombreEnZip = archivo.includes('bot') ? 'tickets_bot.csv' : 
-                               archivo.includes('plantilla') ? 'tickets_plantilla.csv' : archivo;
+        for (const rutaArchivo of archivosConsolidados) {
+            const nombreArchivo = path.basename(rutaArchivo);
+            const nombreEnZip = nombreArchivo.includes('bot') ? 'tickets_bot.csv' : 
+                               nombreArchivo.includes('plantilla') ? 'tickets_plantilla.csv' : nombreArchivo;
             
-            console.log(`[DESCARGAR/TICKETS] Agregando al ZIP: ${archivo} como ${nombreEnZip}`);
+            console.log(`[DESCARGAR/TICKETS] Agregando al ZIP: ${nombreArchivo} como ${nombreEnZip}`);
             archive.file(rutaArchivo, { name: nombreEnZip });
         }
+        
+        archive.on('error', (err) => {
+            throw err;
+        });
+
+        archive.on('end', () => {
+            console.log('[DESCARGAR/TICKETS] ZIP finalizado y enviado.');
+        });
         
         archive.finalize();
 
