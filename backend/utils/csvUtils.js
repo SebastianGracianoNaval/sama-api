@@ -264,9 +264,54 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
 
         let primerContacto = '';
         if (primerMensajeAgente) {
-            const fecha = primerMensajeAgente['metadata.#envelope.storageDate'] || primerMensajeAgente['storageDate'] || '';
+            // Buscar la fecha completa en múltiples campos posibles
+            let fechaCompleta = '';
+            
+            // Priorizar metadata.#envelope.storageDate (formato ISO completo)
+            if (primerMensajeAgente['metadata.#envelope.storageDate']) {
+                fechaCompleta = primerMensajeAgente['metadata.#envelope.storageDate'];
+            }
+            // Luego metadata.#wa.timestamp
+            else if (primerMensajeAgente['metadata.#wa.timestamp']) {
+                fechaCompleta = primerMensajeAgente['metadata.#wa.timestamp'];
+            }
+            // Luego storageDate directo
+            else if (primerMensajeAgente['storageDate']) {
+                fechaCompleta = primerMensajeAgente['storageDate'];
+            }
+            // Luego timestamp directo
+            else if (primerMensajeAgente['timestamp']) {
+                fechaCompleta = primerMensajeAgente['timestamp'];
+            }
+            // Si no hay fecha, usar la fecha actual
+            else {
+                fechaCompleta = new Date().toISOString();
+            }
+            
             const contenido = primerMensajeAgente.content || '';
-            primerContacto = fecha ? `${fecha} - ${contenido}` : contenido;
+            
+            // Asegurar que la fecha esté en formato ISO completo
+            if (fechaCompleta && !fechaCompleta.includes('T')) {
+                // Si es solo fecha (YYYY-MM-DD), convertir a ISO completo
+                try {
+                    const fechaObj = new Date(fechaCompleta);
+                    if (!isNaN(fechaObj.getTime())) {
+                        fechaCompleta = fechaObj.toISOString();
+                    }
+                } catch (e) {
+                    // Si falla, usar la fecha actual
+                    fechaCompleta = new Date().toISOString();
+                }
+            }
+            
+            // Formatear como "FECHA_COMPLETA - CONTENIDO"
+            primerContacto = fechaCompleta ? `${fechaCompleta} - ${contenido}` : contenido;
+            
+            console.log(`[generarTicketIndividual] Primer contacto construido:`, {
+                fechaCompleta,
+                contenido,
+                primerContacto
+            });
         }
         
         // Crear conversación con formato [agente]: y [cliente]:
