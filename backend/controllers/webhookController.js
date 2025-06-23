@@ -161,20 +161,47 @@ const handleWebhook = async (req, res) => {
                 if (!campaign.replied) { // Solo registrar la primera respuesta
                     campaign.replied = true;
                     
-                    // El contenido de la respuesta se extrae del campo correcto según el tipo
+                    // *** LÓGICA ROBUSTA PARA DETECTAR TIPO DE RESPUESTA ***
                     let replyContent = '';
+                    let replyType = '';
+                    
+                    // Detectar si es respuesta de botón o texto tipeado
                     if (jsonData.type === 'application/vnd.lime.reply+json') {
+                        // Es un clic en botón
                         replyContent = jsonData.content?.replied?.value || '';
-                    } else { // Asumir text/plain u otros tipos de mensaje
+                        replyType = 'application/vnd.lime.reply+json';
+                        console.log(`[CampaignTracking] Respuesta de BOTÓN detectada para ${contactId}:`, {
+                            replyContent,
+                            replyType,
+                            originalType: jsonData.type
+                        });
+                    } else if (jsonData.type === 'text/plain') {
+                        // Es texto tipeado
                         replyContent = jsonData.content || '';
+                        replyType = 'text/plain';
+                        console.log(`[CampaignTracking] Respuesta de TEXTO detectada para ${contactId}:`, {
+                            replyContent,
+                            replyType,
+                            originalType: jsonData.type
+                        });
+                    } else {
+                        // Otro tipo de mensaje
+                        replyContent = jsonData.content || '';
+                        replyType = jsonData.type || 'desconocido';
+                        console.log(`[CampaignTracking] Respuesta de TIPO DESCONOCIDO para ${contactId}:`, {
+                            replyContent,
+                            replyType,
+                            originalType: jsonData.type
+                        });
                     }
                     
                     campaign.replyContent = replyContent;
-                    // El tipo de respuesta ahora se maneja desde el webhook de campaña
+                    campaign.replyType = replyType; // Guardar el tipo de respuesta
                     campaign.replyTime = jsonData.metadata?.['#envelope.storageDate'] || new Date().toISOString();
                     
                     console.log(`[CampaignTracking] Registrada respuesta a campaña para ${contactId}:`, {
                         replyContent: campaign.replyContent,
+                        replyType: campaign.replyType,
                         replyTime: campaign.replyTime
                     });
                 }
@@ -697,8 +724,7 @@ const handleCampaignEvent = async (req, res) => {
             identity, 
             numeroTelefono, 
             esPlantilla, 
-            respuesta,
-            tipoRespuesta
+            respuesta
         } = req.body;
         
         console.log('[CampaignEvent] Datos recibidos:', JSON.stringify(req.body, null, 2));
@@ -722,7 +748,6 @@ const handleCampaignEvent = async (req, res) => {
             numeroTelefono: numeroTelefono || contactoIdentity.replace('@wa.gw.msging.net', ''),
             esPlantilla: esPlantilla === true || esPlantilla === 'true',
             respuesta: respuesta || '',
-            tipoRespuesta: tipoRespuesta || '',
             timestamp: new Date().toISOString(),
             procesadoEn: new Date().toISOString(),
             // Campos adicionales para compatibilidad
@@ -745,8 +770,6 @@ const handleCampaignEvent = async (req, res) => {
                 campaign.replied = true;
                 campaign.replyContent = respuesta;
                 campaign.replyTime = campaignEvent.timestamp;
-                // Guardar el tipo de respuesta desde el webhook
-                campaign.replyType = tipoRespuesta || '';
             }
             
             campaignTracking.set(contactoIdentity, campaign);
@@ -755,7 +778,6 @@ const handleCampaignEvent = async (req, res) => {
                 originator: campaign.originator,
                 replyContent: campaign.replyContent,
                 replied: campaign.replied,
-                replyType: campaign.replyType,
                 templateName: campaign.templateName,
                 templateContentWithParams: campaign.templateContentWithParams
             });
@@ -770,7 +792,7 @@ const handleCampaignEvent = async (req, res) => {
             // Crear CSV con el evento de campaña
             const campos = [
                 'id', 'agentePlantilla', 'identity', 'numeroTelefono', 'esPlantilla', 
-                'respuesta', 'tipoRespuesta', 'timestamp', 'procesadoEn', 'storageDate', 'fechaFiltro', 'tipoDato'
+                'respuesta', 'timestamp', 'procesadoEn', 'storageDate', 'fechaFiltro', 'tipoDato'
             ];
             
             const parser = new Parser({ fields: campos, header: true });
