@@ -1341,6 +1341,105 @@ const obtenerFechaFiltro = (obj) => {
     return new Date().toISOString().slice(0, 10);
 };
 
+/**
+ * Genera un resumen de campañas (plantillas) de forma totalmente independiente
+ * @param {string} baseDir - Directorio base (ej: data/tickets)
+ * @param {Object|null} fechas - {fechaInicio, fechaFin} o null
+ * @param {string|null} nombrePlantilla - nombre de la plantilla o null
+ * @returns {Promise<string>} - Ruta del archivo CSV generado
+ */
+async function generarResumenDeCampanas(baseDir, fechas = null, nombrePlantilla = null) {
+    try {
+        // 1. Leer plantillas enviadas
+        const carpetaPlantillas = path.join(path.dirname(baseDir), 'plantillas');
+        if (!fs.existsSync(carpetaPlantillas)) return null;
+        const archivosPlantillas = fs.readdirSync(carpetaPlantillas)
+            .filter(f => f.startsWith('plantilla_') && f.endsWith('.csv'));
+        let envios = [];
+        for (const archivo of archivosPlantillas) {
+            const contenido = fs.readFileSync(path.join(carpetaPlantillas, archivo), 'utf-8');
+            const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+            for (const r of registros) {
+                // Filtro por nombre de plantilla
+                if (nombrePlantilla && r.nombrePlantilla !== nombrePlantilla) continue;
+                // Filtro por fechas
+                if (fechas && r.fechaFiltro) {
+                    if (r.fechaFiltro < fechas.fechaInicio || r.fechaFiltro > fechas.fechaFin) continue;
+                }
+                envios.push({
+                    nombrePlantilla: r.nombrePlantilla,
+                    to: r.to,
+                    fechaEnvio: r.storageDate || r.timestamp || '',
+                    fechaFiltro: r.fechaFiltro || '',
+                    id: r.id || ''
+                });
+            }
+        }
+        if (envios.length === 0) return null;
+        // 2. Leer mensajes de usuarios
+        const carpetaMensajes = path.join(path.dirname(baseDir), 'mensajes');
+        let respuestas = [];
+        if (fs.existsSync(carpetaMensajes)) {
+            const archivosMensajes = fs.readdirSync(carpetaMensajes)
+                .filter(f => f.startsWith('mensaje_') && f.endsWith('.csv'));
+            for (const archivo of archivosMensajes) {
+                const contenido = fs.readFileSync(path.join(carpetaMensajes, archivo), 'utf-8');
+                const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+                for (const r of registros) {
+                    respuestas.push({
+                        from: r.from,
+                        fecha: r.storageDate || r.timestamp || '',
+                        tipo: r.type || '',
+                        contenido: r.content || ''
+                    });
+                }
+            }
+        }
+        // 3. Agrupar y calcular resumen
+        const resumenPorPlantilla = {};
+        for (const envio of envios) {
+            if (!resumenPorPlantilla[envio.nombrePlantilla]) {
+                resumenPorPlantilla[envio.nombrePlantilla] = {
+                    plantilla: envio.nombrePlantilla,
+                    cantidad: 0,
+                    respondidos: 0,
+                    pendientes: 0
+                };
+            }
+            resumenPorPlantilla[envio.nombrePlantilla].cantidad++;
+            // Buscar si hay respuesta posterior al envío
+            const respuesta = respuestas.find(r => r.from === envio.to && new Date(r.fecha) > new Date(envio.fechaEnvio));
+            if (respuesta) {
+                resumenPorPlantilla[envio.nombrePlantilla].respondidos++;
+            }
+        }
+        // Calcular pendientes y tasa
+        const resumenFinal = Object.values(resumenPorPlantilla).map(r => {
+            r.pendientes = r.cantidad - r.respondidos;
+            r.tasa_de_respuesta = r.cantidad > 0 ? ((r.respondidos / r.cantidad) * 100).toFixed(2) : '0.00';
+            return r;
+        });
+        // 4. Exportar CSV
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        const carpetaReportes = path.join(path.dirname(baseDir), 'reportes');
+        if (!fs.existsSync(carpetaReportes)) fs.mkdirSync(carpetaReportes, { recursive: true });
+        const nombreArchivo = nombrePlantilla
+            ? `resumen_campana_${nombrePlantilla}_${hora}_${fecha}.csv`
+            : `resumen_campanas_${hora}_${fecha}.csv`;
+        const rutaCsv = path.join(carpetaReportes, nombreArchivo);
+        const campos = ['plantilla', 'cantidad', 'respondidos', 'pendientes', 'tasa_de_respuesta'];
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(resumenFinal);
+        fs.writeFileSync(rutaCsv, csv);
+        return rutaCsv;
+    } catch (error) {
+        console.error('[generarResumenDeCampanas] Error:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
@@ -1353,5 +1452,6 @@ module.exports = {
     procesarTickets,
     procesarPlantillas,
     consolidarCampanas,
-    obtenerCampanasDisponibles
+    obtenerCampanasDisponibles,
+    generarResumenDeCampanas
 }; 

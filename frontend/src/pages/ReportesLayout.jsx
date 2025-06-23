@@ -13,6 +13,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
 import { saveAs } from 'file-saver';
 import { showToast } from '../components/Toast';
+import ReportesCampanas from '../components/ReportesCampanas';
 
 const drawerWidth = 220;
 
@@ -206,104 +207,81 @@ const ReportesLayout = () => {
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default' }}>
         <Toolbar />
-        <Box sx={{ mb: 3, display: selected ? 'block' : 'none' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0, mb: 1, pb: 1, borderBottom: theme => `1.5px solid ${theme.palette.mode === 'dark' ? '#23272F' : '#e0e0e0'}` }}>
-            {selected === 'Tickets' && <AssignmentIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
-            {selected === 'Campañas' && <DescriptionIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
-            <Typography
-              variant="h4"
-              fontWeight={700}
-              sx={{
-                fontFamily: 'Inter, sans-serif',
-                letterSpacing: '0.5px',
-                color: theme => theme.palette.mode === 'dark' ? '#fff' : '#222',
-                mb: 0,
-              }}
-            >
-              {selected === 'Tickets' ? 'Tus tickets' : selected === 'Campañas' ? 'Tus campañas' : ''}
+        {selected === 'Tickets' && (
+          <Box sx={{ mb: 3, display: selected ? 'block' : 'none' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0, mb: 1, pb: 1, borderBottom: theme => `1.5px solid ${theme.palette.mode === 'dark' ? '#23272F' : '#e0e0e0'}` }}>
+              {selected === 'Tickets' && <AssignmentIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
+              <Typography
+                variant="h4"
+                fontWeight={700}
+                sx={{
+                  fontFamily: 'Inter, sans-serif',
+                  letterSpacing: '0.5px',
+                  color: theme => theme.palette.mode === 'dark' ? '#fff' : '#222',
+                  mb: 0,
+                }}
+              >
+                {selected === 'Tickets' ? 'Tus tickets' : ''}
+              </Typography>
+            </Box>
+            <Typography variant="subtitle1" sx={{ color: theme => theme.palette.mode === 'dark' ? '#B0B0B0' : '#666', mb: 2, ml: 0, pl: 0, textAlign: 'left' }}>
+              {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : ''}
             </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <TextField
+                label="Fecha inicio"
+                type="date"
+                value={fechaInicio}
+                onChange={e => setFechaInicio(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+                sx={{ 
+                  minWidth: 140,
+                  '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+                      filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
+                  }
+                }}
+                inputProps={{ max: new Date().toISOString().slice(0, 10) }}
+              />
+              <TextField
+                label="Fecha fin"
+                type="date"
+                value={fechaFin}
+                onChange={e => setFechaFin(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+                sx={{ 
+                  minWidth: 140,
+                  '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+                      filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
+                  }
+                }}
+                inputProps={{ max: new Date().toISOString().slice(0, 10) }}
+              />
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={handleClearFilters}
+                disabled={downloading}
+                sx={{ minWidth: 100, fontWeight: 500, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
+              >
+                Limpiar
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleDownloadByFilter}
+                disabled={downloading}
+                sx={{ minWidth: 120, fontWeight: 700, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
+              >
+                Descargar
+              </Button>
+            </Box>
           </Box>
-          <Typography variant="subtitle1" sx={{ color: theme => theme.palette.mode === 'dark' ? '#B0B0B0' : '#666', mb: 2, ml: 0, pl: 0, textAlign: 'left' }}>
-            {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : selected === 'Campañas' ? 'Descargá tus campañas y plantillas filtrando por fecha y nombre.' : ''}
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <TextField
-              label="Fecha inicio"
-              type="date"
-              value={fechaInicio}
-              onChange={e => setFechaInicio(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              size="small"
-              sx={{ 
-                minWidth: 140,
-                '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
-                    filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
-                }
-              }}
-              inputProps={{ max: new Date().toISOString().slice(0, 10) }}
-            />
-            <TextField
-              label="Fecha fin"
-              type="date"
-              value={fechaFin}
-              onChange={e => setFechaFin(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              size="small"
-              sx={{ 
-                minWidth: 140,
-                '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
-                    filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
-                }
-              }}
-              inputProps={{ max: new Date().toISOString().slice(0, 10) }}
-            />
-            {selected === 'Campañas' && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <FormControl size="small" sx={{ minWidth: 220 }}>
-                  <InputLabel>Nombre de Plantilla</InputLabel>
-                  <Select
-                    value={nombrePlantilla}
-                    label="Nombre de Plantilla"
-                    onChange={(e) => setNombrePlantilla(e.target.value)}
-                    disabled={loadingPlantillas}
-                  >
-                    <MenuItem value="Todas las plantillas">
-                      <em>Todas las plantillas</em>
-                    </MenuItem>
-                    {plantillasList.map((plantilla) => (
-                      <MenuItem key={plantilla} value={plantilla}>
-                        {plantilla}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Tooltip title="Recargar lista de plantillas">
-                  <IconButton onClick={cargarPlantillas} disabled={loadingPlantillas}>
-                    <RefreshIcon />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            )}
-            <Button
-              variant="outlined"
-              color="secondary"
-              onClick={handleClearFilters}
-              disabled={downloading}
-              sx={{ minWidth: 100, fontWeight: 500, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
-            >
-              Limpiar
-            </Button>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleDownloadByFilter}
-              disabled={downloading}
-              sx={{ minWidth: 120, fontWeight: 700, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
-            >
-              Descargar
-            </Button>
-          </Box>
-        </Box>
+        )}
+        {selected === 'Campañas' && (
+          <ReportesCampanas />
+        )}
         <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <HistoryIcon color="primary" sx={{ mr: 1 }} />

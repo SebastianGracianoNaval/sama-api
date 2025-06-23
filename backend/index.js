@@ -10,7 +10,7 @@ const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos, ticketsAbiertos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson, generarNombreArchivo } = require('./utils/blipUtils');
-const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles } = require('./utils/csvUtils');
+const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles, generarResumenDeCampanas } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
 const { parse } = require('csv-parse/sync');
 const { Parser } = require('json2csv');
@@ -557,6 +557,26 @@ app.get('/descargar/campanas', async (req, res) => {
             message: 'Error al descargar las campanas',
             error: error.message
         });
+    }
+});
+
+// Nueva ruta para resumen de campañas
+app.get('/descargar/campanas/resumen', async (req, res) => {
+    const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
+    try {
+        const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
+        const baseDir = path.join(__dirname, 'data', 'tickets');
+        const rutaCsv = await generarResumenDeCampanas(baseDir, fechas, nombrePlantilla);
+        if (!rutaCsv) {
+            return res.status(404).json({ success: false, message: 'No hay datos para el resumen solicitado.' });
+        }
+        const nombreArchivo = path.basename(rutaCsv);
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+        res.download(rutaCsv);
+    } catch (error) {
+        console.error('[DESCARGAR/CAMPANAS/RESUMEN] Error:', error);
+        res.status(500).json({ success: false, message: 'Error al generar el resumen de campañas.', error: error.message });
     }
 });
 
