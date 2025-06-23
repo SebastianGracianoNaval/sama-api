@@ -160,17 +160,33 @@ const handleWebhook = async (req, res) => {
                 const campaign = campaignTracking.get(contactId);
                 if (!campaign.replied) { // Solo registrar la primera respuesta
                     campaign.replied = true;
-                    campaign.replyContent = jsonData.content || '';
+                    
+                    let replyContent = '';
+                    // Diferenciar entre respuesta de botón (reply) y texto tipeado (plain)
+                    if (jsonData.type === 'application/vnd.lime.reply+json') {
+                        replyContent = jsonData.content?.replied?.value || '';
+                    } else { // Asumir text/plain u otros tipos de mensaje
+                        replyContent = jsonData.content || '';
+                    }
+                    
+                    campaign.replyContent = replyContent;
+                    campaign.replyType = jsonData.type; // Guardamos el tipo de mensaje de respuesta
                     campaign.replyTime = jsonData.metadata?.['#envelope.storageDate'] || new Date().toISOString();
+                    
                     console.log(`[CampaignTracking] Registrada respuesta a campaña para ${contactId}:`, {
                         replyContent: campaign.replyContent,
-                        replyTime: campaign.replyTime
+                        replyTime: campaign.replyTime,
+                        replyType: campaign.replyType
                     });
                 }
             }
         }
         
-        if (!tipo || tipo === 'desconocido') {
+        // --- LÓGICA MEJORADA DE TRACKING DE TICKETS ---
+        // Identificar el tipo de JSON de BLiP incluso si es una respuesta a un botón
+        const tipoIdentificado = identificarTipoJson(jsonData);
+        
+        if (!tipoIdentificado || tipoIdentificado === 'desconocido') {
             console.error('[Webhook] No se pudo identificar el tipo de datos del JSON recibido');
             return res.status(400).json({
                 success: false,

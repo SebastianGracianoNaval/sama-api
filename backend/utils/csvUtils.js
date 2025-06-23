@@ -377,12 +377,13 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             ticketData.emisor = details.originator || '';
             ticketData.hora_envio = details.sentTime || '';
             ticketData.primer_contacto = primerContacto;
+            ticketData.tipo_contenido = details.replyType || '';
 
             campos = [
                 'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'tipo_contenido', 'TIPO'
             ];
         } else { // BOT
             // Asegurar que los tickets BOT tengan todos los campos requeridos
@@ -573,7 +574,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'tipo_contenido', 'TIPO'
             ].join(',');
             
             const contenidoPlantilla = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
@@ -712,7 +713,7 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
             'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
             'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
             'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-            'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+            'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'tipo_contenido', 'TIPO'
         ].join(',');
         
         const contenidoFinal = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
