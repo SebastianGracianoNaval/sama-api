@@ -5,14 +5,16 @@ import Webhooks from '../components/Webhooks';
 
 const Home = () => {
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Reportes />
-      </Box>
-      <Box>
-        <Webhooks />
-      </Box>
-    </Container>
+    <Box sx={{ mt: '64px' }}>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box sx={{ mb: 4 }}>
+          <Reportes />
+        </Box>
+        <Box>
+          <Webhooks />
+        </Box>
+      </Container>
+    </Box>
   );
 };
 

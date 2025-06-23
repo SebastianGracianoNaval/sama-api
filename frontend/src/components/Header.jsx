@@ -39,7 +39,7 @@ const MinimalSwitch = styled(Switch)(({ theme }) => ({
 }));
 
 const Header = ({ mode, toggleMode }) => (
-  <AppBar position="static" sx={{ bgcolor: 'primary.main', boxShadow: 2 }}>
+  <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, bgcolor: 'primary.main', boxShadow: 2 }}>
     <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
       <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
         <Typography

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, 
   Toolbar, Typography, Divider, useTheme, Paper, Button, TextField,
-  FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip
+  FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, CssBaseline
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -42,6 +42,7 @@ const ReportesLayout = () => {
       })
       .catch((error) => {
         console.error('Error fetching reportes:', error);
+        showToast('Error al obtener el historial de reportes.', 'error');
         setReportes([]);
       })
       .finally(() => setLoading(false));
@@ -53,7 +54,6 @@ const ReportesLayout = () => {
       const response = await reportService.getCampanasList();
       if (response.data.success) {
         setPlantillasList(response.data.campanas);
-        console.log('Nombres de plantillas cargados:', response.data.campanas);
       }
     } catch (error) {
       console.error('Error al cargar nombres de plantillas:', error);
@@ -140,7 +140,8 @@ const ReportesLayout = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ display: 'flex' }}>
+      <CssBaseline />
       <Drawer
         variant="permanent"
         sx={{
@@ -151,13 +152,10 @@ const ReportesLayout = () => {
             boxSizing: 'border-box',
             bgcolor: theme.palette.mode === 'dark' ? '#23272F' : '#F3F4F6',
             borderRight: theme.palette.mode === 'dark' ? 0 : '1px solid #e0e0e0',
-            top: '64px',
-            height: 'calc(100% - 64px)',
-            transition: 'background 0.2s',
           },
         }}
-        PaperProps={{ sx: { top: '64px', height: 'calc(100% - 64px)' } }}
       >
+        <Toolbar />
         <Box sx={{ overflow: 'auto', pt: 2 }}>
           <List>
             {reportTypes.map((item) => (
@@ -206,8 +204,8 @@ const ReportesLayout = () => {
           </Box>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, pt: 1, bgcolor: 'background.default' }}>
-        <Toolbar sx={{ minHeight: { xs: 40, sm: 15 } }} />
+      <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default' }}>
+        <Toolbar />
         <Box sx={{ mb: 3, display: selected ? 'block' : 'none' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0, mb: 1, pb: 1, borderBottom: theme => `1.5px solid ${theme.palette.mode === 'dark' ? '#23272F' : '#e0e0e0'}` }}>
             {selected === 'Tickets' && <AssignmentIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
