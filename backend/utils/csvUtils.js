@@ -368,14 +368,14 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             const huboRespuesta = ticketInfo.mensajes.some(m => 
                 m.from && m.from.endsWith('@wa.gw.msging.net')
             ) || details.replied;
-            ticketData.respuesta = huboRespuesta ? 'TRUE' : 'FALSE';
+            ticketData.respuesta_usuario = huboRespuesta ? 'TRUE' : 'FALSE';
             
-            // Usar el contenido de respuesta del cliente si existe, sino el de la plantilla con variables
-            ticketData.contenido = details.replyContent || '';
+            // Usar el contenido de respuesta del cliente si existe
+            ticketData.contenido_usuario = details.replyContent || '';
             
             // Usar el emisor real de la campaña
             ticketData.emisor = details.originator || '';
-            ticketData.hora_envio = details.sentTime || '';
+            ticketData.envio_plantilla = details.sentTime || '';
             ticketData.primer_contacto = primerContacto;
             ticketData.tipo_contenido = details.replyType || '';
 
@@ -383,7 +383,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
                 'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'tipo_contenido', 'TIPO'
+                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO'
             ];
         } else { // BOT
             // Asegurar que los tickets BOT tengan todos los campos requeridos
@@ -415,7 +415,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             sequentialId: ticketData.sequentialId,
             tipo: ticketData.TIPO,
             plantilla: ticketData.plantilla || 'N/A',
-            respuesta: ticketData.respuesta || 'N/A',
+            respuesta_usuario: ticketData.respuesta_usuario || 'N/A',
             emisor: ticketData.emisor || 'N/A'
         });
         
@@ -574,7 +574,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'tipo_contenido', 'TIPO'
+                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO'
             ].join(',');
             
             const contenidoPlantilla = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
@@ -713,7 +713,7 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
             'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
             'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
             'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-            'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'tipo_contenido', 'TIPO'
+            'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO'
         ].join(',');
         
         const contenidoFinal = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');

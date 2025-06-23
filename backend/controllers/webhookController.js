@@ -161,42 +161,15 @@ const handleWebhook = async (req, res) => {
                 if (!campaign.replied) { // Solo registrar la primera respuesta
                     campaign.replied = true;
                     
-                    // *** LÓGICA ROBUSTA PARA DETECTAR TIPO DE RESPUESTA ***
-                    let replyContent = '';
-                    let replyType = '';
+                    // Lógica simplificada: Capturar el type y el content de la respuesta
+                    campaign.replyType = jsonData.type || 'desconocido';
                     
-                    // Detectar si es respuesta de botón o texto tipeado
                     if (jsonData.type === 'application/vnd.lime.reply+json') {
-                        // Es un clic en botón
-                        replyContent = jsonData.content?.replied?.value || '';
-                        replyType = 'application/vnd.lime.reply+json';
-                        console.log(`[CampaignTracking] Respuesta de BOTÓN detectada para ${contactId}:`, {
-                            replyContent,
-                            replyType,
-                            originalType: jsonData.type
-                        });
-                    } else if (jsonData.type === 'text/plain') {
-                        // Es texto tipeado
-                        replyContent = jsonData.content || '';
-                        replyType = 'text/plain';
-                        console.log(`[CampaignTracking] Respuesta de TEXTO detectada para ${contactId}:`, {
-                            replyContent,
-                            replyType,
-                            originalType: jsonData.type
-                        });
+                        campaign.replyContent = jsonData.content?.replied?.value || '';
                     } else {
-                        // Otro tipo de mensaje
-                        replyContent = jsonData.content || '';
-                        replyType = jsonData.type || 'desconocido';
-                        console.log(`[CampaignTracking] Respuesta de TIPO DESCONOCIDO para ${contactId}:`, {
-                            replyContent,
-                            replyType,
-                            originalType: jsonData.type
-                        });
+                        campaign.replyContent = jsonData.content || '';
                     }
-                    
-                    campaign.replyContent = replyContent;
-                    campaign.replyType = replyType; // Guardar el tipo de respuesta
+
                     campaign.replyTime = jsonData.metadata?.['#envelope.storageDate'] || new Date().toISOString();
                     
                     console.log(`[CampaignTracking] Registrada respuesta a campaña para ${contactId}:`, {
