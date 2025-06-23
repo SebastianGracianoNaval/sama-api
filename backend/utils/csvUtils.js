@@ -254,16 +254,18 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             return fa - fb;
         });
         
-        // --- Extraer Primer Contacto del Cliente ---
-        const primerMensajeCliente = ticketInfo.mensajes.find(m => {
+        // --- Extraer Primer Contacto del Agente ---
+        const primerMensajeAgente = ticketInfo.mensajes.find(m => {
             const from = m.from || '';
-            return from.includes('@wa.gw.msging.net');
+            const messageEmitter = m.metadata?.['#messageEmitter'];
+            // Un mensaje es del agente si NO es del cliente de WhatsApp, O si está marcado como 'Human'
+            return (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || messageEmitter === 'Human';
         });
 
         let primerContacto = '';
-        if (primerMensajeCliente) {
-            const fecha = primerMensajeCliente['metadata.#envelope.storageDate'] || primerMensajeCliente['storageDate'] || '';
-            const contenido = primerMensajeCliente.content || '';
+        if (primerMensajeAgente) {
+            const fecha = primerMensajeAgente['metadata.#envelope.storageDate'] || primerMensajeAgente['storageDate'] || '';
+            const contenido = primerMensajeAgente.content || '';
             primerContacto = fecha ? `${fecha} - ${contenido}` : contenido;
         }
         
