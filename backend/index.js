@@ -99,6 +99,38 @@ app.post('/api/bot-event', async (req, res) => {
     }
 });
 
+// NUEVA RUTA: Para eventos específicos de campañas
+app.post('/api/campaign-event', async (req, res) => {
+    try {
+        const { handleCampaignEvent } = require('./controllers/webhookController');
+        
+        // Crear una respuesta personalizada para capturar los datos
+        const originalJson = res.json;
+        let responseData = null;
+        
+        res.json = function(data) {
+            responseData = data;
+            return originalJson.call(this, data);
+        };
+        
+        await handleCampaignEvent(req, res);
+        
+        // Si la respuesta fue exitosa, guardar en webhooksRecibidos
+        if (responseData && responseData.success && responseData.webhookData) {
+            webhooksRecibidos.push(responseData.webhookData);
+            console.log('[CampaignEvent] Evento agregado a webhooksRecibidos:', responseData.webhookData);
+        }
+        
+    } catch (error) {
+        console.error('Error en ruta campaign-event:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: error.message
+        });
+    }
+});
+
 // Ruta para consolidar archivos CSV por tipo
 app.post('/consolidar/:tipo', consolidarArchivos);
 

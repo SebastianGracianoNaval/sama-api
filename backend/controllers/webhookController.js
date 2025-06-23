@@ -109,16 +109,17 @@ const handleWebhook = async (req, res) => {
                 campaign.templateName = jsonData.extras.campaignMessageTemplate;
                 campaign.campaignId = jsonData.extras.campaignId || '';
                 
-                // Si ya tenemos contenido de plantilla, construir con parámetros de extras
-                if (campaign.templateContent && jsonData.extras) {
-                    const parameters = [];
-                    // Extraer parámetros de extras (0, 1, 2, etc.)
-                    for (let i = 0; i < 10; i++) {
-                        if (jsonData.extras[i.toString()] !== undefined) {
-                            parameters.push({ text: jsonData.extras[i.toString()] });
-                        }
+                // Extraer variables de extras (0, 1, 2, etc.)
+                const parameters = [];
+                for (let i = 0; i < 10; i++) {
+                    if (jsonData.extras[i.toString()] !== undefined) {
+                        parameters.push({ text: jsonData.extras[i.toString()] });
                     }
-                    campaign.templateParameters = parameters;
+                }
+                campaign.templateParameters = parameters;
+                
+                // Si ya tenemos contenido de plantilla, construir con parámetros de extras
+                if (campaign.templateContent && parameters.length > 0) {
                     campaign.templateContentWithParams = construirContenidoPlantilla(campaign.templateContent, parameters);
                 }
                 
@@ -127,7 +128,8 @@ const handleWebhook = async (req, res) => {
                     originator: campaign.originator,
                     templateName: campaign.templateName,
                     campaignId: campaign.campaignId,
-                    templateContentWithParams: campaign.templateContentWithParams
+                    templateContentWithParams: campaign.templateContentWithParams,
+                    parameters: parameters.map(p => p.text)
                 });
             }
         } else if (tipo === 'mensaje') {
@@ -268,7 +270,8 @@ const handleWebhook = async (req, res) => {
                                 originator: finalCampaignDetails.originator,
                                 campaignId: finalCampaignDetails.campaignId,
                                 templateContentWithParams: finalCampaignDetails.templateContentWithParams
-                            } : null
+                            } : null,
+                            campaignId: content.CampaignId
                         });
                         
                         // Una vez que el ticket se abre, podemos limpiar el tracking para este contacto
@@ -665,10 +668,134 @@ function calcularDuracionTicket(inicio, fin) {
     return `${dias}d ${horas}h ${mins}m ${segs}s`;
 }
 
+/**
+ * Maneja eventos específicos de campañas (envío de plantillas, respuestas, etc.)
+ * @param {Object} req - Objeto de solicitud Express
+ * @param {Object} res - Objeto de respuesta Express
+ */
+const handleCampaignEvent = async (req, res) => {
+    try {
+        const { 
+            agentePlantilla, 
+            identity, 
+            numeroTelefono, 
+            esPlantilla, 
+            respuesta 
+        } = req.body;
+        
+        console.log('[CampaignEvent] Datos recibidos:', JSON.stringify(req.body, null, 2));
+        
+        // Validar datos requeridos
+        if (!identity || esPlantilla === undefined) {
+            return res.status(400).json({
+                success: false,
+                message: 'identity y esPlantilla son requeridos'
+            });
+        }
+        
+        // Extraer número de teléfono del identity si no se proporciona
+        const numeroTelefonoFinal = numeroTelefono || identity.replace('@wa.gw.msging.net', '');
+        
+        // Crear evento de campaña con estructura consistente
+        const campaignEvent = {
+            id: `campaign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            agentePlantilla: agentePlantilla || '',
+            identity,
+            numeroTelefono: numeroTelefonoFinal,
+            esPlantilla: esPlantilla === true || esPlantilla === 'true',
+            respuesta: respuesta || '',
+            timestamp: new Date().toISOString(),
+            procesadoEn: new Date().toISOString(),
+            // Campos adicionales para compatibilidad
+            storageDate: new Date().toISOString(),
+            fechaFiltro: new Date().toISOString().slice(0, 10),
+            tipoDato: 'evento_campaña'
+        };
+        
+        console.log('[CampaignEvent] Evento procesado:', campaignEvent);
+        
+        // Si es una plantilla, actualizar el tracking de campañas
+        if (campaignEvent.esPlantilla) {
+            const campaign = campaignTracking.get(numeroTelefonoFinal) || {};
+            
+            // Actualizar con información del agente
+            campaign.originator = agentePlantilla;
+            
+            // Si hay respuesta del usuario, actualizarla
+            if (respuesta) {
+                campaign.replied = true;
+                campaign.replyContent = respuesta;
+                campaign.replyTime = campaignEvent.timestamp;
+            }
+            
+            campaignTracking.set(numeroTelefonoFinal, campaign);
+            
+            console.log(`[CampaignEvent] Tracking actualizado para ${numeroTelefonoFinal}:`, {
+                originator: campaign.originator,
+                replyContent: campaign.replyContent,
+                replied: campaign.replied,
+                templateName: campaign.templateName,
+                templateContentWithParams: campaign.templateContentWithParams
+            });
+        }
+        
+        // Guardar evento de campaña en CSV
+        try {
+            const carpeta = obtenerRutaCarpeta('evento');
+            const nombreArchivo = generarNombreArchivo('evento_campaña');
+            const outputPath = path.join(__dirname, '..', carpeta, nombreArchivo);
+            
+            // Crear CSV con el evento de campaña
+            const campos = [
+                'id', 'agentePlantilla', 'identity', 'numeroTelefono', 'esPlantilla', 
+                'respuesta', 'timestamp', 'procesadoEn', 'storageDate', 'fechaFiltro', 'tipoDato'
+            ];
+            
+            const parser = new Parser({ fields: campos, header: true });
+            const csv = parser.parse([campaignEvent]);
+            
+            // Asegurar directorio
+            const dir = path.dirname(outputPath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            
+            fs.writeFileSync(outputPath, csv);
+            console.log(`[CampaignEvent] Evento guardado en: ${outputPath}`);
+            
+        } catch (error) {
+            console.error('[CampaignEvent] Error al guardar evento:', error);
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: 'Evento de campaña procesado correctamente',
+            eventoId: campaignEvent.id,
+            esPlantilla: campaignEvent.esPlantilla,
+            contacto: numeroTelefonoFinal,
+            // Incluir datos para el frontend
+            webhookData: {
+                fecha: new Date().toISOString(),
+                tipo: 'CAMPAIGN EVENT',
+                body: campaignEvent
+            }
+        });
+        
+    } catch (error) {
+        console.error('[CampaignEvent] Error procesando evento de campaña:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al procesar el evento de campaña',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     handleWebhook,
     consolidarArchivos,
     consolidarTickets,
     handleBotEvent,
+    handleCampaignEvent,
     ticketsAbiertos
 }; 
