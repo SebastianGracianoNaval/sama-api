@@ -311,6 +311,12 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             // Usar el nombre real de la plantilla
             ticketData.plantilla = details.templateName || '';
             
+            // *** NUEVAS COLUMNAS ***
+            ticketData.plantilla_contenido = details.templateContent || '';
+            ticketData.plantilla_variables = (details.templateParameters || [])
+                .map(p => p.text || p) // Manejar objetos {text: val} o strings
+                .join('|');
+
             // Determinar si hubo respuesta: si hay mensajes del cliente O si el tracking lo indica
             const huboRespuesta = ticketInfo.mensajes.some(m => 
                 m.from && m.from.endsWith('@wa.gw.msging.net')
@@ -329,7 +335,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
                 'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
             ];
         } else { // BOT
             // Asegurar que los tickets BOT tengan todos los campos requeridos
@@ -520,7 +526,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
             ].join(',');
             
             const contenidoPlantilla = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
@@ -659,7 +665,7 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
             'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
             'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
             'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-            'plantilla', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
+            'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta', 'contenido', 'emisor', 'hora_envio', 'primer_contacto', 'TIPO'
         ].join(',');
         
         const contenidoFinal = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
