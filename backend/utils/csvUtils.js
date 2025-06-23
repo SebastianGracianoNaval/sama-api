@@ -604,102 +604,182 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
         console.log(`[consolidarCampanas] Fechas recibidas:`, fechas);
         console.log(`[consolidarCampanas] Nombre de plantilla filtro:`, nombrePlantilla);
         
-        // Buscar archivos CSV de tickets en la carpeta de reportes
-        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
-        if (!fs.existsSync(carpetaReportes)) {
-            console.log('[consolidarCampanas] No existe carpeta de reportes, creando...');
-            fs.mkdirSync(carpetaReportes, { recursive: true });
+        // 1. OBTENER TODAS LAS PLANTILLAS ENVIADAS
+        const carpetaPlantillas = path.join(path.dirname(directorio), 'plantillas');
+        if (!fs.existsSync(carpetaPlantillas)) {
+            console.log('[consolidarCampanas] No existe carpeta de plantillas');
             return null;
         }
 
-        const archivos = fs.readdirSync(carpetaReportes)
-            .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
+        const archivosPlantillas = fs.readdirSync(carpetaPlantillas)
+            .filter(archivo => archivo.startsWith('plantilla_') && archivo.endsWith('.csv'));
 
-        console.log('[consolidarCampanas] Archivos de tickets encontrados:', archivos);
+        console.log('[consolidarCampanas] Archivos de plantillas encontrados:', archivosPlantillas);
 
-        if (archivos.length === 0) {
-            console.log('[consolidarCampanas] No hay archivos de tickets para consolidar');
+        if (archivosPlantillas.length === 0) {
+            console.log('[consolidarCampanas] No hay archivos de plantillas para procesar');
             return null;
         }
 
-        let ticketsPlantilla = [];
-        let incluidas = 0;
-        let descartadas = 0;
-
-        for (const archivo of archivos) {
-            const rutaArchivo = path.join(carpetaReportes, archivo);
-            const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
-            const lineas = contenido.split('\n');
+        // 2. OBTENER TODOS LOS MENSAJES (RESPUESTAS DE USUARIOS)
+        const carpetaMensajes = path.join(path.dirname(directorio), 'mensajes');
+        const mensajesPorContacto = new Map();
+        
+        if (fs.existsSync(carpetaMensajes)) {
+            const archivosMensajes = fs.readdirSync(carpetaMensajes)
+                .filter(archivo => archivo.startsWith('mensaje_') && archivo.endsWith('.csv'));
             
-            if (lineas.length < 2) continue; // Saltar archivos vacíos
+            console.log('[consolidarCampanas] Archivos de mensajes encontrados:', archivosMensajes);
             
-            const encabezados = lineas[0];
-            const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-            const fechaIndex = columnas.findIndex(col => col === 'fechaCierre');
-            const tipoIndex = columnas.findIndex(col => col === 'TIPO');
-            const plantillaIndex = columnas.findIndex(col => col === 'plantilla');
-            
-            console.log(`[consolidarCampanas] Procesando archivo: ${archivo}`);
-            console.log(`[consolidarCampanas] Índices - fechaCierre: ${fechaIndex}, TIPO: ${tipoIndex}, plantilla: ${plantillaIndex}`);
-            
-            for (let i = 1; i < lineas.length; i++) {
-                const linea = lineas[i].trim();
-                if (!linea) continue;
+            for (const archivo of archivosMensajes) {
+                const rutaArchivo = path.join(carpetaMensajes, archivo);
+                const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+                const registros = parse(contenido, { columns: true, skip_empty_lines: true });
                 
-                try {
-                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    
-                    // Verificar que sea un ticket de plantilla
-                    if (tipoIndex !== -1) {
-                        const tipoTicket = valores[tipoIndex];
-                        if (tipoTicket !== 'PLANTILLA') {
-                            descartadas++;
-                            console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - no es de plantilla (tipo: ${tipoTicket})`);
-                            continue;
+                for (const registro of registros) {
+                    const from = registro.from;
+                    if (from && from.endsWith('@wa.gw.msging.net')) {
+                        if (!mensajesPorContacto.has(from)) {
+                            mensajesPorContacto.set(from, []);
                         }
+                        mensajesPorContacto.get(from).push(registro);
                     }
-                    
-                    // Filtrar por nombre de plantilla si se especifica
-                    if (nombrePlantilla && plantillaIndex !== -1) {
-                        const nombrePlantillaCsv = valores[plantillaIndex];
-                        if (nombrePlantillaCsv !== nombrePlantilla) {
-                            descartadas++;
-                            console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - plantilla no coincide: ${nombrePlantillaCsv} vs ${nombrePlantilla}`);
-                            continue;
-                        }
-                    }
-                    
-                    // Filtrar por fechas si se especifican
-                    if (fechas && fechaIndex !== -1) {
-                        const fecha = valores[fechaIndex];
-                        console.log(`[consolidarCampanas] Procesando línea ${i}, fechaCierre: '${fecha}'`);
-                        
-                        if (!fechaEnRango(fecha, fechas)) {
-                            descartadas++;
-                            console.log(`[consolidarCampanas] Línea ${i} DESCARTADA - fecha fuera de rango`);
-                            continue;
-                        }
-                    }
-                    
-                    ticketsPlantilla.push(linea);
-                    incluidas++;
-                    console.log(`[consolidarCampanas] Línea ${i} INCLUIDA`);
-                    
-                } catch (error) {
-                    console.warn(`[consolidarCampanas] Error procesando línea ${i}:`, error.message);
-                    descartadas++;
                 }
             }
         }
 
-        console.log(`[consolidarCampanas] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
+        // 3. OBTENER TODOS LOS TICKETS CERRADOS
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        const ticketsPorContacto = new Map();
+        
+        if (fs.existsSync(carpetaReportes)) {
+            const archivosTickets = fs.readdirSync(carpetaReportes)
+                .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
+            
+            console.log('[consolidarCampanas] Archivos de tickets encontrados:', archivosTickets);
+            
+            for (const archivo of archivosTickets) {
+                const rutaArchivo = path.join(carpetaReportes, archivo);
+                const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+                const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+                
+                for (const registro of registros) {
+                    const contacto = registro.contacto;
+                    if (contacto) {
+                        const contactIdentity = `${contacto}@wa.gw.msging.net`;
+                        if (!ticketsPorContacto.has(contactIdentity)) {
+                            ticketsPorContacto.set(contactIdentity, []);
+                        }
+                        ticketsPorContacto.get(contactIdentity).push(registro);
+                    }
+                }
+            }
+        }
+
+        // 4. PROCESAR CADA PLANTILLA ENVIADA
+        let reporteCampanas = [];
+        let incluidas = 0;
+        let descartadas = 0;
+
+        for (const archivo of archivosPlantillas) {
+            const rutaArchivo = path.join(carpetaPlantillas, archivo);
+            const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+            
+            console.log(`[consolidarCampanas] Procesando archivo de plantillas: ${archivo}`);
+            
+            for (const plantilla of registros) {
+                // Filtrar por nombre de plantilla si se especifica
+                if (nombrePlantilla && plantilla.nombrePlantilla !== nombrePlantilla) {
+                    descartadas++;
+                    console.log(`[consolidarCampanas] Plantilla descartada - nombre no coincide: ${plantilla.nombrePlantilla} vs ${nombrePlantilla}`);
+                    continue;
+                }
+
+                // Filtrar por fechas si se especifican
+                if (fechas && plantilla.fechaFiltro) {
+                    if (!fechaEnRango(plantilla.fechaFiltro, fechas)) {
+                        descartadas++;
+                        console.log(`[consolidarCampanas] Plantilla descartada - fecha fuera de rango: ${plantilla.fechaFiltro}`);
+                        continue;
+                    }
+                }
+
+                // Buscar el contacto al que se envió la plantilla
+                // En las plantillas, el campo 'to' contiene el contacto
+                const contactIdentity = plantilla.to;
+                if (!contactIdentity || !contactIdentity.endsWith('@wa.gw.msging.net')) {
+                    console.log(`[consolidarCampanas] Plantilla sin contacto válido: ${contactIdentity}`);
+                    continue;
+                }
+
+                // Buscar respuestas del usuario
+                const mensajesUsuario = mensajesPorContacto.get(contactIdentity) || [];
+                const respuestaUsuario = mensajesUsuario.find(m => {
+                    const mensajeTime = new Date(m.storageDate || m.timestamp || '');
+                    const plantillaTime = new Date(plantilla.storageDate || plantilla.timestamp || '');
+                    return mensajeTime > plantillaTime;
+                });
+
+                // Buscar ticket correspondiente
+                const ticketsContacto = ticketsPorContacto.get(contactIdentity) || [];
+                const ticketCorrespondiente = ticketsContacto.find(t => {
+                    const ticketTime = new Date(t.fechaCierre || t.storageDate || '');
+                    const plantillaTime = new Date(plantilla.storageDate || plantilla.timestamp || '');
+                    return ticketTime > plantillaTime;
+                });
+
+                // Crear registro de campaña
+                const registroCampana = {
+                    // Información de la plantilla
+                    plantilla_id: plantilla.id || '',
+                    plantilla_nombre: plantilla.nombrePlantilla || '',
+                    plantilla_contenido: plantilla.contenidoPlantilla || '',
+                    plantilla_parametros: plantilla.parametros || '',
+                    plantilla_campaignId: plantilla.campaignId || '',
+                    plantilla_campaignName: plantilla.campaignName || '',
+                    plantilla_fecha_envio: plantilla.storageDate || plantilla.timestamp || '',
+                    
+                    // Información del contacto
+                    contacto_identity: contactIdentity,
+                    contacto_numero: contactIdentity.replace('@wa.gw.msging.net', ''),
+                    
+                    // Respuesta del usuario (si existe)
+                    usuario_respuesta: respuestaUsuario ? 'SI' : 'NO',
+                    usuario_tipo_respuesta: respuestaUsuario ? respuestaUsuario.type || '' : '',
+                    usuario_contenido: respuestaUsuario ? respuestaUsuario.content || '' : '',
+                    usuario_fecha_respuesta: respuestaUsuario ? (respuestaUsuario.storageDate || respuestaUsuario.timestamp || '') : '',
+                    
+                    // Ticket generado (si existe)
+                    ticket_generado: ticketCorrespondiente ? 'SI' : 'NO',
+                    ticket_id: ticketCorrespondiente ? ticketCorrespondiente.id || '' : '',
+                    ticket_sequentialId: ticketCorrespondiente ? ticketCorrespondiente.sequentialId || '' : '',
+                    ticket_estado: ticketCorrespondiente ? ticketCorrespondiente.estadoTicket || '' : '',
+                    ticket_fecha_cierre: ticketCorrespondiente ? ticketCorrespondiente.fechaCierre || '' : '',
+                    ticket_tipo_cierre: ticketCorrespondiente ? ticketCorrespondiente.tipoCierre || '' : '',
+                    ticket_agente: ticketCorrespondiente ? ticketCorrespondiente.agente || '' : '',
+                    ticket_duracion: ticketCorrespondiente ? ticketCorrespondiente.duracion || '' : '',
+                    
+                    // Campos de sistema
+                    fechaFiltro: plantilla.fechaFiltro || '',
+                    tipoDato: 'campaña',
+                    procesadoEn: new Date().toISOString()
+                };
+
+                reporteCampanas.push(registroCampana);
+                incluidas++;
+                console.log(`[consolidarCampanas] Campaña incluida: ${plantilla.nombrePlantilla} -> ${contactIdentity} (respuesta: ${registroCampana.usuario_respuesta}, ticket: ${registroCampana.ticket_generado})`);
+            }
+        }
+
+        console.log(`[consolidarCampanas] Total campañas incluidas: ${incluidas}, descartadas: ${descartadas}`);
         
         if (incluidas === 0) {
             console.log('[consolidarCampanas] No hay datos después del filtrado.');
             return null;
         }
 
-        // Generar archivo consolidado
+        // 5. GENERAR ARCHIVO CONSOLIDADO
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
@@ -708,16 +788,21 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
             : `campanas_consolidado_${hora}_${fecha}.csv`;
         const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
         
-        // Agregar encabezados para tickets de plantilla
-        const encabezadosPlantilla = [
-            'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
-            'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
-            'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-            'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO'
-        ].join(',');
+        // Definir encabezados para el reporte de campañas
+        const encabezados = [
+            'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros',
+            'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
+            'contacto_identity', 'contacto_numero',
+            'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
+            'ticket_generado', 'ticket_id', 'ticket_sequentialId', 'ticket_estado',
+            'ticket_fecha_cierre', 'ticket_tipo_cierre', 'ticket_agente', 'ticket_duracion',
+            'fechaFiltro', 'tipoDato', 'procesadoEn'
+        ];
         
-        const contenidoFinal = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
-        fs.writeFileSync(rutaConsolidada, contenidoFinal);
+        const parser = new Parser({ fields: encabezados, header: true });
+        const csv = parser.parse(reporteCampanas);
+        
+        fs.writeFileSync(rutaConsolidada, csv);
         console.log('[consolidarCampanas] Archivo consolidado generado:', rutaConsolidada);
         
         return rutaConsolidada;
@@ -1102,6 +1187,9 @@ const procesarPlantillas = async (jsonData, outputPath) => {
                 tipo: content.type || '',
                 language: template.language?.code || templateContent.language || '',
                 
+                // Campo del destinatario (importante para tracking)
+                to: plantilla.to || '',
+                
                 // Campos de contenido
                 contenidoPlantilla: contenidoPlantilla,
                 parametros: parametros.join('|'),
@@ -1127,7 +1215,7 @@ const procesarPlantillas = async (jsonData, outputPath) => {
         });
 
         const campos = [
-            'id', 'nombrePlantilla', 'tipo', 'language', 'contenidoPlantilla', 
+            'id', 'nombrePlantilla', 'tipo', 'language', 'to', 'contenidoPlantilla', 
             'parametros', 'numeroParametros', 'storageDate', 'timestamp',
             'campaignId', 'campaignName', 'stateId', 'masterState',
             'fechaFiltro', 'tipoDato', 'procesadoEn'
