@@ -284,12 +284,12 @@ const ReportesLayout = () => {
         )}
         <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <HistoryIcon color="primary" sx={{ mr: 1 }} />
+            <HistoryIcon sx={{ mr: 1, color: theme => theme.palette.mode === 'dark' ? '#fff' : 'primary.main' }} />
             <Typography variant="h5" fontWeight={700} sx={{ fontFamily: 'Roboto, Arial' }}>
               Historial de exportaciones
             </Typography>
             <Tooltip title="Actualizar historial">
-              <IconButton onClick={cargarHistorial} disabled={loading} sx={{ml: 2}}>
+              <IconButton onClick={cargarHistorial} disabled={loading} sx={{ml: 2, color: theme => theme.palette.mode === 'dark' ? '#fff' : 'inherit'}}>
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
@@ -313,6 +313,13 @@ const ReportesLayout = () => {
                     startIcon={downloading === r.name ? <CircularProgress size={16} /> : <DownloadIcon />}
                     onClick={() => handleDownload(r.name)}
                     disabled={!!downloading}
+                    sx={{
+                      color: theme.palette.mode === 'dark' ? '#fff' : theme.palette.primary.main,
+                      borderColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.23)',
+                      '&:hover': {
+                        borderColor: theme.palette.mode === 'dark' ? '#fff' : theme.palette.primary.main,
+                      }
+                    }}
                   >
                     Descargar
                   </Button>

@@ -96,16 +96,16 @@ const Webhooks = () => {
         <Box sx={{ display: 'flex', gap: 1 }}>
           <IconButton 
             onClick={limpiarWebhooks} 
-            color="error"
             title="Limpiar webhooks de la vista"
+            sx={{ color: theme.palette.mode === 'dark' ? '#ff8a80' : 'error.main' }}
           >
             <ClearAllIcon />
           </IconButton>
           <IconButton 
             onClick={cargarWebhooks} 
             disabled={loading}
-            color="primary"
             title="Recargar webhooks"
+            sx={{ color: theme.palette.mode === 'dark' ? '#fff' : 'primary.main' }}
           >
             <RefreshIcon />
           </IconButton>

@@ -103,7 +103,13 @@ const ReportesCampanas = () => {
           value={fechaInicio}
           onChange={(e) => setFechaInicio(e.target.value)}
           InputLabelProps={{ shrink: true }}
-          sx={{ minWidth: 140, maxWidth: 180 }}
+          sx={{
+            minWidth: 140,
+            maxWidth: 180,
+            '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+              filter: theme => theme.palette.mode === 'dark' ? 'invert(1)' : 'none',
+            },
+          }}
         />
         <TextField
           label="Fecha fin"
@@ -111,7 +117,13 @@ const ReportesCampanas = () => {
           value={fechaFin}
           onChange={(e) => setFechaFin(e.target.value)}
           InputLabelProps={{ shrink: true }}
-          sx={{ minWidth: 140, maxWidth: 180 }}
+          sx={{
+            minWidth: 140,
+            maxWidth: 180,
+            '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
+              filter: theme => theme.palette.mode === 'dark' ? 'invert(1)' : 'none',
+            },
+          }}
         />
         <FormControl sx={{ width: '350px' }}>
           <InputLabel>Nombre de Plantilla</InputLabel>
@@ -129,7 +141,7 @@ const ReportesCampanas = () => {
           </Select>
         </FormControl>
         <Tooltip title="Refrescar lista de plantillas">
-          <IconButton onClick={fetchPlantillas} aria-label="refrescar plantillas">
+          <IconButton onClick={fetchPlantillas} aria-label="refrescar plantillas" sx={theme => ({ color: theme.palette.mode === 'dark' ? '#fff' : 'inherit' })}>
             <RefreshIcon />
           </IconButton>
         </Tooltip>
