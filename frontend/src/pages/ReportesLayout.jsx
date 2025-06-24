@@ -144,8 +144,8 @@ const ReportesLayout = () => {
       const now = new Date();
       const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
       const fecha = now.toISOString().slice(0,10);
-      const response = await reportService.downloadAll(fechaInicio, fechaFin);
-      const filename = `tickets_${hora}_${fecha}.zip`;
+      const response = await reportService.downloadTickets(fechaInicio, fechaFin);
+      const filename = `tickets_consolidado_${hora}_${fecha}.csv`;
       saveAs(new Blob([response.data]), filename);
       showToast('Archivo descargado correctamente', 'success');
       setTimeout(cargarHistorial, 2000);
