@@ -442,17 +442,27 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
 };
 
 /**
- * Procesa y agrega información de transferencias a los tickets de un contacto
+ * Procesa y agrega información de transferencias a los tickets de un contacto (v3: usa parentSequentialId y logs detallados)
  * @param {Array} tickets - Array de tickets de un contacto
  * @returns {Array} - Array de tickets con columnas de transferencia
  */
 function procesarTransferenciasTicketsV2(tickets) {
-    // Ordenar por storageDate para asegurar el orden cronológico
-    tickets.sort((a, b) => new Date(a.storageDate || a['storageDate']) - new Date(b.storageDate || b['storageDate']));
-    // Buscar el ticket de cierre (el que tiene tipoCierre o estadoTicket 'cerrado')
-    let idxCierre = tickets.findIndex(t => (t.tipoCierre && t.tipoCierre !== '') || (t.estadoTicket && t.estadoTicket.toLowerCase() === 'cerrado'));
-    if (idxCierre === -1) idxCierre = tickets.length - 1;
-    // Todos los tickets antes del cierre (excepto el primero) son transferencias
+    // Ordenar por storageDate o sequentialId para asegurar el orden cronológico
+    tickets.sort((a, b) => {
+        const sa = a.storageDate || a['storageDate'] || '';
+        const sb = b.storageDate || b['storageDate'] || '';
+        if (sa && sb) return new Date(sa) - new Date(sb);
+        // Fallback por sequentialId si no hay storageDate
+        return (parseInt(a.sequentialId) || 0) - (parseInt(b.sequentialId) || 0);
+    });
+    // Crear un mapa de sequentialId a ticket para lookup rápido
+    const mapaSeq = {};
+    tickets.forEach(t => {
+        if (t.sequentialId) mapaSeq[t.sequentialId] = t;
+    });
+    // Historial de transferencias (sequentialId)
+    let historial = [];
+    let cantidad_transferencias = 0;
     let resultado = [];
     for (let i = 0; i < tickets.length; i++) {
         const t = tickets[i];
@@ -463,11 +473,11 @@ function procesarTransferenciasTicketsV2(tickets) {
         let agente_transferido = '';
         let cola_transferida = '';
         let historial_transferencias = '';
-        let cantidad_transferencias = 0;
-        // Si hay más de un ticket antes del cierre, los siguientes son transferencias
-        if (tickets.length > 1 && i > 0 && i <= idxCierre) {
+        // Detectar transferencia por parentSequentialId
+        const parentSeq = t.parentSequentialId || t['parentSequentialId'] || '';
+        if (parentSeq && mapaSeq[parentSeq]) {
             transferencia = 'TRUE';
-            ticket_padre = tickets[i-1].sequentialId || '';
+            ticket_padre = parentSeq;
             ticket_hijo = t.sequentialId || '';
             // Detectar tipo de transferencia
             const team = t.team || t['team'] || '';
@@ -484,9 +494,17 @@ function procesarTransferenciasTicketsV2(tickets) {
                 tipo_transferencia = 'COLA';
                 cola_transferida = team;
             }
-            // Historial de transferencias
-            historial_transferencias = tickets.slice(0, i+1).map(tk => tk.sequentialId).join('→');
-            cantidad_transferencias = i;
+            cantidad_transferencias++;
+            historial.push(ticket_hijo);
+            historial_transferencias = historial.join('→');
+            console.log(`[TRANSFERENCIA] Ticket hijo: ${ticket_hijo} (padre: ${ticket_padre}) - Tipo: ${tipo_transferencia} - Agente: ${agente_transferido} - Cola: ${cola_transferida}`);
+        } else {
+            // No es transferencia, es ticket raíz o no tiene parent
+            if (t.sequentialId) historial = [t.sequentialId];
+            cantidad_transferencias = 0;
+            historial_transferencias = historial.join('→');
+            // Log para ticket raíz
+            console.log(`[TICKET RAÍZ] Ticket: ${t.sequentialId || ''}`);
         }
         // Agregar columnas
         t.transferencia = transferencia;
