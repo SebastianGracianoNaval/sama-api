@@ -442,7 +442,113 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
 };
 
 /**
- * Consolida todos los archivos CSV individuales de tickets en uno solo
+ * Procesa y agrega información de transferencias a los tickets de un contacto
+ * @param {Array} tickets - Array de tickets de un contacto
+ * @returns {Array} - Array de tickets con columnas de transferencia
+ */
+function procesarTransferenciasTickets(tickets) {
+    // Mapa de sequentialId a ticket
+    const idMap = new Map();
+    tickets.forEach(t => {
+        const seqId = t.sequentialId || t["sequentialId"];
+        if (seqId) idMap.set(seqId.toString(), t);
+    });
+    // Mapa de parentSequentialId a hijos
+    const parentMap = new Map();
+    tickets.forEach(t => {
+        const parentId = t.parentSequentialId || t["parentSequentialId"];
+        if (parentId) {
+            if (!parentMap.has(parentId.toString())) parentMap.set(parentId.toString(), []);
+            parentMap.get(parentId.toString()).push(t);
+        }
+    });
+    // Encontrar el/los tickets raíz (sin parentSequentialId)
+    const roots = tickets.filter(t => !t.parentSequentialId);
+    // Recorrer la cadena de transferencias
+    let cadena = [];
+    function recorrerCadena(ticket) {
+        if (!ticket) return;
+        cadena.push(ticket);
+        const seqId = ticket.sequentialId?.toString();
+        const hijos = parentMap.get(seqId) || [];
+        if (hijos.length > 0) {
+            // Si hay varios hijos, tomar el primero (caso raro)
+            recorrerCadena(hijos[0]);
+        }
+    }
+    // Si hay más de una raíz, procesar cada una como cadena independiente
+    let cadenas = [];
+    for (const root of roots) {
+        cadena = [];
+        recorrerCadena(root);
+        if (cadena.length > 0) cadenas.push([...cadena]);
+    }
+    // Tickets que no están en ninguna cadena (huérfanos)
+    const usados = new Set(cadenas.flat().map(t => t.sequentialId?.toString()));
+    const huerfanos = tickets.filter(t => !usados.has(t.sequentialId?.toString()));
+    if (huerfanos.length > 0) cadenas.push(...huerfanos.map(t => [t]));
+    // Procesar cada cadena
+    let resultado = [];
+    for (const cadena of cadenas) {
+        const historial = cadena.map(t => t.sequentialId).join('→');
+        const cantidad = cadena.length - 1;
+        for (let i = 0; i < cadena.length; i++) {
+            const t = cadena[i];
+            // Inicializar columnas
+            let transferencia = false;
+            let ticket_padre = '';
+            let ticket_hijo = '';
+            let tipo_transferencia = '';
+            let agente_transferido = '';
+            let cola_transferida = '';
+            // Detectar padre
+            if (t.parentSequentialId) {
+                transferencia = true;
+                ticket_padre = t.parentSequentialId;
+            }
+            // Detectar hijo
+            const seqId = t.sequentialId?.toString();
+            const hijo = cadena[i + 1];
+            if (hijo) {
+                transferencia = true;
+                ticket_hijo = hijo.sequentialId;
+                // Determinar tipo de transferencia y destino
+                const team = hijo.team || hijo.content?.team || '';
+                const agentIdentity = hijo.agentIdentity || hijo.content?.agentIdentity || '';
+                if (team === 'DIRECT_TRANSFER' && agentIdentity) {
+                    tipo_transferencia = 'AGENTE';
+                    try {
+                        agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                    } catch {
+                        agente_transferido = agentIdentity;
+                    }
+                    cola_transferida = 'DIRECT_TRANSFER';
+                } else if (team && team !== 'DIRECT_TRANSFER') {
+                    tipo_transferencia = 'COLA';
+                    cola_transferida = team;
+                }
+            }
+            // Si no tiene padre ni hijo, no es transferencia
+            if (!ticket_padre && !ticket_hijo) {
+                transferencia = false;
+            }
+            // Agregar columnas al ticket
+            t.transferencia = transferencia ? 'TRUE' : 'FALSE';
+            t.ticket_padre = ticket_padre || '';
+            t.ticket_hijo = ticket_hijo || '';
+            t.tipo_transferencia = tipo_transferencia;
+            t.agente_transferido = agente_transferido;
+            t.cola_transferida = cola_transferida;
+            t.historial_transferencias = historial;
+            t.cantidad_transferencias = cantidad;
+            resultado.push(t);
+        }
+    }
+    return resultado;
+}
+
+/**
+ * Consolida todos los archivos CSV individuales de tickets en uno solo, agregando info de transferencias
  * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
  * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
  * @returns {Promise<string>} - Ruta del archivo CSV consolidado
@@ -469,122 +575,51 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             return null;
         }
 
-        // Separar tickets por tipo
-        let ticketsBot = [];
-        let ticketsPlantilla = [];
-        let incluidas = 0;
-        let descartadas = 0;
-
+        // Leer y parsear todos los tickets
+        let tickets = [];
         for (const archivo of archivos) {
             const rutaArchivo = path.join(carpetaReportes, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
-            const lineas = contenido.split('\n');
-            
-            if (lineas.length < 2) continue; // Saltar archivos vacíos
-            
-            const encabezados = lineas[0];
-            const columnas = encabezados.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-            const fechaIndex = columnas.findIndex(col => col === 'fechaCierre');
-            const tipoIndex = columnas.findIndex(col => col === 'TIPO');
-            
-            console.log(`[consolidarTicketsCsvs] Procesando archivo: ${archivo}`);
-            console.log(`[consolidarTicketsCsvs] Índices - fechaCierre: ${fechaIndex}, TIPO: ${tipoIndex}`);
-            
-            for (let i = 1; i < lineas.length; i++) {
-                const linea = lineas[i].trim();
-                if (!linea) continue;
-                
-                try {
-                    const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
-                    
-                    // Filtrar por fechas si se especifican
-                    if (fechas && fechaIndex !== -1) {
-                        const fecha = valores[fechaIndex];
-                        console.log(`[consolidarTicketsCsvs] Procesando línea ${i}, fechaCierre: '${fecha}'`);
-                        
-                        if (!fechaEnRango(fecha, fechas)) {
-                            descartadas++;
-                            console.log(`[consolidarTicketsCsvs] Línea ${i} DESCARTADA - fecha fuera de rango`);
-                            continue;
-                        }
-                    }
-                    
-                    // Determinar tipo de ticket
-                    let tipoTicket = 'BOT';
-                    if (tipoIndex !== -1) {
-                        tipoTicket = valores[tipoIndex] || 'BOT';
-                    }
-                    
-                    // Separar por tipo
-                    if (tipoTicket === 'PLANTILLA') {
-                        ticketsPlantilla.push(linea);
-                    } else {
-                        ticketsBot.push(linea);
-                    }
-                    incluidas++;
-                    console.log(`[consolidarTicketsCsvs] Línea ${i} INCLUIDA - Tipo: ${tipoTicket}`);
-                    
-                } catch (error) {
-                    console.warn(`[consolidarTicketsCsvs] Error procesando línea ${i}:`, error.message);
-                    descartadas++;
-                }
-            }
+            const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+            tickets.push(...registros);
         }
-
-        console.log(`[consolidarTicketsCsvs] Total líneas incluidas: ${incluidas}, descartadas: ${descartadas}`);
-        console.log(`[consolidarTicketsCsvs] Tickets BOT: ${ticketsBot.length}, Tickets PLANTILLA: ${ticketsPlantilla.length}`);
-        
-        if (incluidas === 0) {
-            console.log('[consolidarTicketsCsvs] No hay datos después del filtrado.');
-            return null;
+        // Filtrar por fechas si aplica
+        if (fechas) {
+            tickets = tickets.filter(t => fechaEnRango(t.fechaCierre, fechas));
         }
-
-        // Generar archivos consolidados separados
+        // Agrupar por contacto
+        const grupos = {};
+        for (const t of tickets) {
+            const contacto = t.contacto || t.customerIdentity || t["customerIdentity"] || '';
+            if (!grupos[contacto]) grupos[contacto] = [];
+            grupos[contacto].push(t);
+        }
+        // Procesar transferencias por grupo
+        let ticketsProcesados = [];
+        for (const arr of Object.values(grupos)) {
+            ticketsProcesados.push(...procesarTransferenciasTickets(arr));
+        }
+        // Ordenar campos: sequentialId, transferencia, ticket_padre, ticket_hijo, tipo_transferencia, agente_transferido, cola_transferida, historial_transferencias, cantidad_transferencias, ...resto
+        const camposBase = [
+            'sequentialId', 'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia',
+            'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
+        ];
+        // Detectar el resto de campos originales
+        const camposExtra = Object.keys(ticketsProcesados[0] || {}).filter(
+            c => !camposBase.includes(c)
+        );
+        const camposFinal = [...camposBase, ...camposExtra];
+        // Generar CSV
+        const parser = new Parser({ fields: camposFinal, header: true });
+        const csv = parser.parse(ticketsProcesados);
+        // Guardar archivo
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
-        
-        let archivosGenerados = [];
-        
-        // Generar archivo consolidado de tickets BOT
-        if (ticketsBot.length > 0) {
-            const nombreArchivoBot = `tickets_bot_consolidado_${hora}_${fecha}.csv`;
-            const rutaConsolidadaBot = path.join(carpetaReportes, nombreArchivoBot);
-            
-            // Agregar encabezados para tickets BOT
-            const encabezadosBot = [
-                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
-                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
-                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO'
-            ].join(',');
-            
-            const contenidoBot = [encabezadosBot, ...ticketsBot].join('\n');
-            fs.writeFileSync(rutaConsolidadaBot, contenidoBot);
-            archivosGenerados.push(rutaConsolidadaBot);
-            console.log(`[consolidarTicketsCsvs] Archivo consolidado BOT generado: ${rutaConsolidadaBot}`);
-        }
-        
-        // Generar archivo consolidado de tickets PLANTILLA
-        if (ticketsPlantilla.length > 0) {
-            const nombreArchivoPlantilla = `tickets_plantilla_consolidado_${hora}_${fecha}.csv`;
-            const rutaConsolidadaPlantilla = path.join(carpetaReportes, nombreArchivoPlantilla);
-            
-            // Agregar encabezados para tickets PLANTILLA
-            const encabezadosPlantilla = [
-                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
-                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
-                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO'
-            ].join(',');
-            
-            const contenidoPlantilla = [encabezadosPlantilla, ...ticketsPlantilla].join('\n');
-            fs.writeFileSync(rutaConsolidadaPlantilla, contenidoPlantilla);
-            archivosGenerados.push(rutaConsolidadaPlantilla);
-            console.log(`[consolidarTicketsCsvs] Archivo consolidado PLANTILLA generado: ${rutaConsolidadaPlantilla}`);
-        }
-        
-        // Retornar las rutas de los archivos generados
-        return archivosGenerados;
+        const nombreArchivo = `tickets_consolidado_${hora}_${fecha}.csv`;
+        const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
+        fs.writeFileSync(rutaConsolidada, csv);
+        return rutaConsolidada;
     } catch (error) {
         console.error('[consolidarTicketsCsvs] Error:', error);
         throw error;
