@@ -453,12 +453,14 @@ app.get('/descargar/tickets', async (req, res) => {
         // Consolidar todos los tickets (BOT y PLANTILLA)
         const rutaCsvConsolidado = await consolidarTicketsCsvs(pathCarpetaTickets, fechas);
         if (!rutaCsvConsolidado) {
-            return res.status(404).json({ success: false, message: 'No hay tickets para exportar en el período especificado.' });
+            console.log('[DESCARGAR/TICKETS] No se generó archivo consolidado de tickets.');
+            return res.status(404).json({ success: false, message: 'No hay tickets para exportar.' });
         }
         // Leer el CSV consolidado y separar en BOT y PLANTILLA
         const contenido = fs.readFileSync(rutaCsvConsolidado, 'utf-8');
         const lineas = contenido.split('\n');
         if (lineas.length < 2) {
+            console.log('[DESCARGAR/TICKETS] El archivo consolidado no tiene datos.');
             return res.status(404).json({ success: false, message: 'No hay tickets para exportar.' });
         }
         const encabezado = lineas[0];
@@ -473,24 +475,29 @@ app.get('/descargar/tickets', async (req, res) => {
             if (tipo === 'BOT') bot.push(linea);
             else if (tipo === 'PLANTILLA') plantilla.push(linea);
         }
+        // LOG: Cuántas líneas tiene cada CSV
+        console.log(`[DESCARGAR/TICKETS] Tickets BOT: ${bot.length-1}, Tickets PLANTILLA: ${plantilla.length-1}`);
         // Crear archivos temporales solo si hay datos
         const tmpDir = os.tmpdir();
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
-        let botPath = null, plantillaPath = null;
         let archivosParaZip = [];
+        let botPath = null, plantillaPath = null;
         if (bot.length > 1) {
             botPath = path.join(tmpDir, `tickets_bot_${hora}_${fecha}.csv`);
             fs.writeFileSync(botPath, bot.join('\n'));
             archivosParaZip.push({ path: botPath, name: 'tickets_bot.csv' });
+            console.log(`[DESCARGAR/TICKETS] Se agregará al ZIP: tickets_bot.csv (${bot.length-1} tickets)`);
         }
         if (plantilla.length > 1) {
             plantillaPath = path.join(tmpDir, `tickets_plantilla_${hora}_${fecha}.csv`);
             fs.writeFileSync(plantillaPath, plantilla.join('\n'));
             archivosParaZip.push({ path: plantillaPath, name: 'tickets_plantilla.csv' });
+            console.log(`[DESCARGAR/TICKETS] Se agregará al ZIP: tickets_plantilla.csv (${plantilla.length-1} tickets)`);
         }
         if (archivosParaZip.length === 0) {
+            console.log('[DESCARGAR/TICKETS] No hay tickets BOT ni PLANTILLA para exportar.');
             return res.status(404).json({ success: false, message: 'No hay tickets para exportar.' });
         }
         // Crear ZIP con los archivos existentes
@@ -500,7 +507,10 @@ app.get('/descargar/tickets', async (req, res) => {
         res.setHeader('Content-Type', 'application/zip');
         res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
         archive.pipe(res);
-        archivosParaZip.forEach(f => archive.file(f.path, { name: f.name }));
+        archivosParaZip.forEach(f => {
+            console.log(`[DESCARGAR/TICKETS] Agregando al ZIP: ${f.name}`);
+            archive.file(f.path, { name: f.name });
+        });
         archive.finalize();
         // Eliminar archivos temporales después de enviar el ZIP
         archive.on('end', () => {
