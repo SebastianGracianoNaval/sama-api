@@ -532,7 +532,7 @@ function procesarTransferenciasTickets(tickets) {
             if (!ticket_padre && !ticket_hijo) {
                 transferencia = false;
             }
-            // Agregar columnas al ticket
+            // Agregar columnas de transferencia SIN eliminar las originales
             t.transferencia = transferencia ? 'TRUE' : 'FALSE';
             t.ticket_padre = ticket_padre || '';
             t.ticket_hijo = ticket_hijo || '';
@@ -555,26 +555,15 @@ function procesarTransferenciasTickets(tickets) {
  */
 const consolidarTicketsCsvs = async (directorio, fechas = null) => {
     try {
-        console.log(`[consolidarTicketsCsvs] Iniciando consolidación de tickets, directorio: ${directorio}`);
-        console.log(`[consolidarTicketsCsvs] Fechas recibidas:`, fechas);
-        
-        // Buscar archivos CSV individuales de tickets en la carpeta de reportes
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
-            console.log('[consolidarTicketsCsvs] No existe carpeta de reportes');
             return null;
         }
-
         const archivos = fs.readdirSync(carpetaReportes)
             .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
-        
-        console.log('[consolidarTicketsCsvs] Archivos de tickets encontrados:', archivos);
-
         if (archivos.length === 0) {
-            console.log('[consolidarTicketsCsvs] No hay archivos de tickets para consolidar');
             return null;
         }
-
         // Leer y parsear todos los tickets
         let tickets = [];
         for (const archivo of archivos) {
@@ -599,16 +588,20 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         for (const arr of Object.values(grupos)) {
             ticketsProcesados.push(...procesarTransferenciasTickets(arr));
         }
-        // Ordenar campos: sequentialId, transferencia, ticket_padre, ticket_hijo, tipo_transferencia, agente_transferido, cola_transferida, historial_transferencias, cantidad_transferencias, ...resto
-        const camposBase = [
-            'sequentialId', 'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia',
+        // Detectar todas las columnas originales presentes en los tickets (en orden de aparición)
+        const camposTransferencia = [
+            'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia',
             'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
         ];
-        // Detectar el resto de campos originales
-        const camposExtra = Object.keys(ticketsProcesados[0] || {}).filter(
-            c => !camposBase.includes(c)
-        );
-        const camposFinal = [...camposBase, ...camposExtra];
+        const camposOriginales = [];
+        ticketsProcesados.forEach(t => {
+            Object.keys(t).forEach(k => {
+                if (!camposTransferencia.includes(k) && !camposOriginales.includes(k)) {
+                    camposOriginales.push(k);
+                }
+            });
+        });
+        const camposFinal = [...camposTransferencia, ...camposOriginales];
         // Generar CSV
         const parser = new Parser({ fields: camposFinal, header: true });
         const csv = parser.parse(ticketsProcesados);
