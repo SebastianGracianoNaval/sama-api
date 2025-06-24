@@ -446,103 +446,58 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
  * @param {Array} tickets - Array de tickets de un contacto
  * @returns {Array} - Array de tickets con columnas de transferencia
  */
-function procesarTransferenciasTickets(tickets) {
-    // Mapa de sequentialId a ticket
-    const idMap = new Map();
-    tickets.forEach(t => {
-        const seqId = t.sequentialId || t["sequentialId"];
-        if (seqId) idMap.set(seqId.toString(), t);
-    });
-    // Mapa de parentSequentialId a hijos
-    const parentMap = new Map();
-    tickets.forEach(t => {
-        const parentId = t.parentSequentialId || t["parentSequentialId"];
-        if (parentId) {
-            if (!parentMap.has(parentId.toString())) parentMap.set(parentId.toString(), []);
-            parentMap.get(parentId.toString()).push(t);
-        }
-    });
-    // Encontrar el/los tickets raíz (sin parentSequentialId)
-    const roots = tickets.filter(t => !t.parentSequentialId);
-    // Recorrer la cadena de transferencias
-    let cadena = [];
-    function recorrerCadena(ticket) {
-        if (!ticket) return;
-        cadena.push(ticket);
-        const seqId = ticket.sequentialId?.toString();
-        const hijos = parentMap.get(seqId) || [];
-        if (hijos.length > 0) {
-            // Si hay varios hijos, tomar el primero (caso raro)
-            recorrerCadena(hijos[0]);
-        }
-    }
-    // Si hay más de una raíz, procesar cada una como cadena independiente
-    let cadenas = [];
-    for (const root of roots) {
-        cadena = [];
-        recorrerCadena(root);
-        if (cadena.length > 0) cadenas.push([...cadena]);
-    }
-    // Tickets que no están en ninguna cadena (huérfanos)
-    const usados = new Set(cadenas.flat().map(t => t.sequentialId?.toString()));
-    const huerfanos = tickets.filter(t => !usados.has(t.sequentialId?.toString()));
-    if (huerfanos.length > 0) cadenas.push(...huerfanos.map(t => [t]));
-    // Procesar cada cadena
+function procesarTransferenciasTicketsV2(tickets) {
+    // Ordenar por storageDate para asegurar el orden cronológico
+    tickets.sort((a, b) => new Date(a.storageDate || a['storageDate']) - new Date(b.storageDate || b['storageDate']));
+    // Buscar el ticket de cierre (el que tiene tipoCierre o estadoTicket 'cerrado')
+    let idxCierre = tickets.findIndex(t => (t.tipoCierre && t.tipoCierre !== '') || (t.estadoTicket && t.estadoTicket.toLowerCase() === 'cerrado'));
+    if (idxCierre === -1) idxCierre = tickets.length - 1;
+    // Todos los tickets antes del cierre (excepto el primero) son transferencias
     let resultado = [];
-    for (const cadena of cadenas) {
-        const historial = cadena.map(t => t.sequentialId).join('→');
-        const cantidad = cadena.length - 1;
-        for (let i = 0; i < cadena.length; i++) {
-            const t = cadena[i];
-            // Inicializar columnas
-            let transferencia = false;
-            let ticket_padre = '';
-            let ticket_hijo = '';
-            let tipo_transferencia = '';
-            let agente_transferido = '';
-            let cola_transferida = '';
-            // Detectar padre
-            if (t.parentSequentialId) {
-                transferencia = true;
-                ticket_padre = t.parentSequentialId;
-            }
-            // Detectar hijo
-            const seqId = t.sequentialId?.toString();
-            const hijo = cadena[i + 1];
-            if (hijo) {
-                transferencia = true;
-                ticket_hijo = hijo.sequentialId;
-                // Determinar tipo de transferencia y destino
-                const team = hijo.team || hijo.content?.team || '';
-                const agentIdentity = hijo.agentIdentity || hijo.content?.agentIdentity || '';
-                if (team === 'DIRECT_TRANSFER' && agentIdentity) {
-                    tipo_transferencia = 'AGENTE';
-                    try {
-                        agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
-                    } catch {
-                        agente_transferido = agentIdentity;
-                    }
-                    cola_transferida = 'DIRECT_TRANSFER';
-                } else if (team && team !== 'DIRECT_TRANSFER') {
-                    tipo_transferencia = 'COLA';
-                    cola_transferida = team;
+    for (let i = 0; i < tickets.length; i++) {
+        const t = tickets[i];
+        let transferencia = 'FALSE';
+        let ticket_padre = '';
+        let ticket_hijo = '';
+        let tipo_transferencia = '';
+        let agente_transferido = '';
+        let cola_transferida = '';
+        let historial_transferencias = '';
+        let cantidad_transferencias = 0;
+        // Si hay más de un ticket antes del cierre, los siguientes son transferencias
+        if (tickets.length > 1 && i > 0 && i <= idxCierre) {
+            transferencia = 'TRUE';
+            ticket_padre = tickets[i-1].sequentialId || '';
+            ticket_hijo = t.sequentialId || '';
+            // Detectar tipo de transferencia
+            const team = t.team || t['team'] || '';
+            const agentIdentity = t.agentIdentity || t['agentIdentity'] || '';
+            if (team === 'DIRECT_TRANSFER' && agentIdentity) {
+                tipo_transferencia = 'AGENTE';
+                try {
+                    agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                } catch {
+                    agente_transferido = agentIdentity;
                 }
+                cola_transferida = 'DIRECT_TRANSFER';
+            } else if (team && team !== 'DIRECT_TRANSFER') {
+                tipo_transferencia = 'COLA';
+                cola_transferida = team;
             }
-            // Si no tiene padre ni hijo, no es transferencia
-            if (!ticket_padre && !ticket_hijo) {
-                transferencia = false;
-            }
-            // Agregar columnas de transferencia SIN eliminar las originales
-            t.transferencia = transferencia ? 'TRUE' : 'FALSE';
-            t.ticket_padre = ticket_padre || '';
-            t.ticket_hijo = ticket_hijo || '';
-            t.tipo_transferencia = tipo_transferencia;
-            t.agente_transferido = agente_transferido;
-            t.cola_transferida = cola_transferida;
-            t.historial_transferencias = historial;
-            t.cantidad_transferencias = cantidad;
-            resultado.push(t);
+            // Historial de transferencias
+            historial_transferencias = tickets.slice(0, i+1).map(tk => tk.sequentialId).join('→');
+            cantidad_transferencias = i;
         }
+        // Agregar columnas
+        t.transferencia = transferencia;
+        t.ticket_padre = ticket_padre;
+        t.ticket_hijo = ticket_hijo;
+        t.tipo_transferencia = tipo_transferencia;
+        t.agente_transferido = agente_transferido;
+        t.cola_transferida = cola_transferida;
+        t.historial_transferencias = historial_transferencias;
+        t.cantidad_transferencias = cantidad_transferencias;
+        resultado.push(t);
     }
     return resultado;
 }
@@ -583,25 +538,31 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             if (!grupos[contacto]) grupos[contacto] = [];
             grupos[contacto].push(t);
         }
-        // Procesar transferencias por grupo
+        // Procesar transferencias por grupo con la nueva lógica
         let ticketsProcesados = [];
         for (const arr of Object.values(grupos)) {
-            ticketsProcesados.push(...procesarTransferenciasTickets(arr));
+            ticketsProcesados.push(...procesarTransferenciasTicketsV2(arr));
         }
-        // Detectar todas las columnas originales presentes en los tickets (en orden de aparición)
+        // Orden de columnas solicitado
+        const camposPrincipales = [
+            'id', 'sequentialId', 'status', 'team', 'unreadMessages',
+            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO'
+        ];
         const camposTransferencia = [
             'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia',
             'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
         ];
-        const camposOriginales = [];
+        // Detectar campos extra (por si hay columnas adicionales)
+        const camposExtra = [];
         ticketsProcesados.forEach(t => {
             Object.keys(t).forEach(k => {
-                if (!camposTransferencia.includes(k) && !camposOriginales.includes(k)) {
-                    camposOriginales.push(k);
+                if (!camposPrincipales.includes(k) && !camposTransferencia.includes(k) && !camposExtra.includes(k)) {
+                    camposExtra.push(k);
                 }
             });
         });
-        const camposFinal = [...camposTransferencia, ...camposOriginales];
+        const camposFinal = [...camposPrincipales, ...camposTransferencia, ...camposExtra];
         // Generar CSV
         const parser = new Parser({ fields: camposFinal, header: true });
         const csv = parser.parse(ticketsProcesados);
