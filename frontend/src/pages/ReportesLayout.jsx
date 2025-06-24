@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DescriptionIcon from '@mui/icons-material/Description';
+import PersonIcon from '@mui/icons-material/Person';
 import HistoryIcon from '@mui/icons-material/History';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { reportService } from '../services/api';
@@ -14,12 +15,16 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { saveAs } from 'file-saver';
 import { showToast } from '../components/Toast';
 import ReportesCampanas from '../components/ReportesCampanas';
+import AgentesPanel from '../components/AgentesPanel';
+import ClearIcon from '@mui/icons-material/Clear';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 
 const drawerWidth = 220;
 
 const reportTypes = [
   { label: 'Tickets', icon: <AssignmentIcon /> },
   { label: 'Campañas', icon: <DescriptionIcon /> },
+  { label: 'Agentes', icon: <PersonIcon /> },
 ];
 
 const ReportesLayout = () => {
@@ -113,6 +118,44 @@ const ReportesLayout = () => {
     }
   };
 
+  // --- FUNCIÓN PARA DESCARGAR INFORME DE TICKETS ---
+  const descargarArchivo = async () => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    if (fechaInicio && !fechaFin) {
+      showToast('Por favor, especifique fecha fin.', 'error');
+      return;
+    }
+    if (fechaFin && !fechaInicio) {
+      showToast('Por favor, especifique fecha inicio.', 'error');
+      return;
+    }
+    if (fechaInicio && fechaFin) {
+      if (fechaFin < fechaInicio) {
+        showToast('La fecha fin no puede ser anterior a la fecha inicio.', 'error');
+        return;
+      }
+      if (fechaInicio > hoy || fechaFin > hoy) {
+        showToast('No se pueden seleccionar fechas futuras.', 'error');
+        return;
+      }
+    }
+    setDownloading(true);
+    try {
+      const now = new Date();
+      const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+      const fecha = now.toISOString().slice(0,10);
+      const response = await reportService.downloadAll(fechaInicio, fechaFin);
+      const filename = `tickets_${hora}_${fecha}.zip`;
+      saveAs(new Blob([response.data]), filename);
+      showToast('Archivo descargado correctamente', 'success');
+      setTimeout(cargarHistorial, 2000);
+    } catch (error) {
+      showToast(error.message || 'Error al descargar el archivo', 'error');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
@@ -181,38 +224,27 @@ const ReportesLayout = () => {
       <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default' }}>
         <Toolbar />
         {selected === 'Tickets' && (
-          <Box sx={{ mb: 3, display: selected ? 'block' : 'none' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0, mb: 1, pb: 1, borderBottom: theme => `1.5px solid ${theme.palette.mode === 'dark' ? '#23272F' : '#e0e0e0'}` }}>
-              {selected === 'Tickets' && <AssignmentIcon sx={{ color: theme => theme.palette.mode === 'dark' ? '#fff' : '#004080', fontSize: 36 }} />}
-              <Typography
-                variant="h4"
-                fontWeight={700}
-                sx={{
-                  fontFamily: 'Inter, sans-serif',
-                  letterSpacing: '0.5px',
-                  color: theme => theme.palette.mode === 'dark' ? '#fff' : '#222',
-                  mb: 0,
-                }}
-              >
-                {selected === 'Tickets' ? 'Tus tickets' : ''}
-              </Typography>
-            </Box>
-            <Typography variant="subtitle1" sx={{ color: theme => theme.palette.mode === 'dark' ? '#B0B0B0' : '#666', mb: 2, ml: 0, pl: 0, textAlign: 'left' }}>
-              {selected === 'Tickets' ? 'Descargá tus tickets filtrando por fecha.' : ''}
+          <Paper elevation={3} sx={{ p: 3, mb: 4, overflow: 'hidden' }}>
+            <Typography variant="h5" gutterBottom component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AssignmentIcon sx={{ fontSize: 32, color: theme.palette.mode === 'dark' ? '#fff' : 'primary.main' }} /> Tus Tickets
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Descargá el detalle de tus tickets filtrando por fecha.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, mb: 0, flexWrap: { xs: 'wrap', sm: 'nowrap' }, alignItems: 'center' }}>
               <TextField
                 label="Fecha inicio"
                 type="date"
                 value={fechaInicio}
                 onChange={e => setFechaInicio(e.target.value)}
                 InputLabelProps={{ shrink: true }}
-                size="small"
-                sx={{ 
-                  minWidth: 140,
+                sx={{
+                  flex: 1,
+                  minWidth: 180,
+                  maxWidth: 320,
                   '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
-                      filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
-                  }
+                    filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none',
+                  },
                 }}
                 inputProps={{ max: new Date().toISOString().slice(0, 10) }}
               />
@@ -222,38 +254,55 @@ const ReportesLayout = () => {
                 value={fechaFin}
                 onChange={e => setFechaFin(e.target.value)}
                 InputLabelProps={{ shrink: true }}
-                size="small"
-                sx={{ 
-                  minWidth: 140,
+                sx={{
+                  flex: 1,
+                  minWidth: 180,
+                  maxWidth: 320,
                   '& .MuiInputBase-input::-webkit-calendar-picker-indicator': {
-                      filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none'
-                  }
+                    filter: theme.palette.mode === 'dark' ? 'invert(1)' : 'none',
+                  },
                 }}
                 inputProps={{ max: new Date().toISOString().slice(0, 10) }}
               />
               <Button
                 variant="outlined"
+                startIcon={<ClearIcon />}
                 color="secondary"
-                onClick={handleClearFilters}
-                disabled={downloading}
-                sx={{ minWidth: 100, fontWeight: 500, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
+                sx={theme => ({
+                  minWidth: '100px',
+                  bgcolor: theme.palette.mode === 'dark' ? '#fff' : '#f5f5f5',
+                  color: theme.palette.mode === 'dark' ? '#222' : '#333',
+                  borderColor: theme.palette.mode === 'dark' ? '#bbb' : '#ccc',
+                  '&:hover': {
+                    bgcolor: theme.palette.mode === 'dark' ? '#eee' : '#e0e0e0',
+                    borderColor: theme.palette.mode === 'dark' ? '#888' : '#bbb',
+                  },
+                })}
+                onClick={() => { setFechaInicio(''); setFechaFin(''); }}
+                disabled={!!downloading}
               >
                 Limpiar
               </Button>
+            </Box>
+            <Box sx={{ mt: 2, mb: 1, display: 'flex', justifyContent: 'flex-start' }}>
               <Button
                 variant="contained"
                 color="primary"
-                onClick={handleDownloadByFilter}
-                disabled={downloading}
-                sx={{ minWidth: 120, fontWeight: 700, fontFamily: 'Inter, Montserrat, Poppins, Roboto, Arial', borderRadius: 2, ml: 1 }}
+                startIcon={<FileDownloadIcon />}
+                sx={{ minWidth: 160, fontWeight: 700, borderRadius: 2, height: 40 }}
+                onClick={descargarArchivo}
+                disabled={!!downloading}
               >
-                Descargar
+                Descargar Informe
               </Button>
             </Box>
-          </Box>
+          </Paper>
         )}
         {selected === 'Campañas' && (
           <ReportesCampanas />
+        )}
+        {selected === 'Agentes' && (
+          <AgentesPanel />
         )}
         <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
