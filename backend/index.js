@@ -473,29 +473,38 @@ app.get('/descargar/tickets', async (req, res) => {
             if (tipo === 'BOT') bot.push(linea);
             else if (tipo === 'PLANTILLA') plantilla.push(linea);
         }
-        // Crear archivos temporales para los CSV
+        // Crear archivos temporales solo si hay datos
         const tmpDir = os.tmpdir();
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
-        const botPath = path.join(tmpDir, `tickets_bot_${hora}_${fecha}.csv`);
-        const plantillaPath = path.join(tmpDir, `tickets_plantilla_${hora}_${fecha}.csv`);
-        fs.writeFileSync(botPath, bot.join('\n'));
-        fs.writeFileSync(plantillaPath, plantilla.join('\n'));
-        // Crear ZIP con los dos archivos
+        let botPath = null, plantillaPath = null;
+        let archivosParaZip = [];
+        if (bot.length > 1) {
+            botPath = path.join(tmpDir, `tickets_bot_${hora}_${fecha}.csv`);
+            fs.writeFileSync(botPath, bot.join('\n'));
+            archivosParaZip.push({ path: botPath, name: 'tickets_bot.csv' });
+        }
+        if (plantilla.length > 1) {
+            plantillaPath = path.join(tmpDir, `tickets_plantilla_${hora}_${fecha}.csv`);
+            fs.writeFileSync(plantillaPath, plantilla.join('\n'));
+            archivosParaZip.push({ path: plantillaPath, name: 'tickets_plantilla.csv' });
+        }
+        if (archivosParaZip.length === 0) {
+            return res.status(404).json({ success: false, message: 'No hay tickets para exportar.' });
+        }
+        // Crear ZIP con los archivos existentes
         const archiver = require('archiver');
         const archive = archiver('zip', { zlib: { level: 9 } });
         const zipName = `reporte_tickets_${fecha}.zip`;
         res.setHeader('Content-Type', 'application/zip');
         res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
         archive.pipe(res);
-        archive.file(botPath, { name: 'tickets_bot.csv' });
-        archive.file(plantillaPath, { name: 'tickets_plantilla.csv' });
+        archivosParaZip.forEach(f => archive.file(f.path, { name: f.name }));
         archive.finalize();
         // Eliminar archivos temporales después de enviar el ZIP
         archive.on('end', () => {
-            fs.unlink(botPath, () => {});
-            fs.unlink(plantillaPath, () => {});
+            archivosParaZip.forEach(f => fs.unlink(f.path, () => {}));
         });
     } catch (error) {
         console.error('[Descargar Tickets ZIP] Error:', error);
