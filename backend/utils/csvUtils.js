@@ -331,6 +331,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         const ticketData = {
             id: ticket.id || '',
             sequentialId: content.sequentialId || '',
+            parentSequentialId: content.parentSequentialId || '',
             status: content.status || '',
             team: content.team || '',
             unreadMessages: content.unreadMessages || 0,
@@ -380,7 +381,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             ticketData.tipo_contenido = details.replyType || '';
 
             campos = [
-                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
                 'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO'
@@ -388,7 +389,7 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
         } else { // BOT
             // Asegurar que los tickets BOT tengan todos los campos requeridos
             campos = [
-                'id', 'sequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO'
             ];
@@ -537,6 +538,8 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         if (archivos.length === 0) {
             return null;
         }
+        console.log(`[consolidarTicketsCsvs] Archivos encontrados: ${archivos.length}`);
+        
         // Leer y parsear todos los tickets
         let tickets = [];
         for (const archivo of archivos) {
@@ -545,22 +548,36 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             const registros = parse(contenido, { columns: true, skip_empty_lines: true });
             tickets.push(...registros);
         }
+        
+        console.log(`[consolidarTicketsCsvs] Total tickets leídos: ${tickets.length}`);
+        
         // Filtrar por fechas si aplica
         if (fechas) {
+            const ticketsAntes = tickets.length;
             tickets = tickets.filter(t => fechaEnRango(t.fechaCierre, fechas));
+            console.log(`[consolidarTicketsCsvs] Tickets después del filtro de fechas: ${tickets.length} (antes: ${ticketsAntes})`);
         }
-        // Agrupar por contacto
+        
+        // Agrupar por contacto para procesar transferencias
         const grupos = {};
         for (const t of tickets) {
             const contacto = t.contacto || t.customerIdentity || t["customerIdentity"] || '';
             if (!grupos[contacto]) grupos[contacto] = [];
             grupos[contacto].push(t);
         }
+        
+        console.log(`[consolidarTicketsCsvs] Grupos de contacto encontrados: ${Object.keys(grupos).length}`);
+        
         // Procesar transferencias por grupo con la nueva lógica
         let ticketsProcesados = [];
-        for (const arr of Object.values(grupos)) {
-            ticketsProcesados.push(...procesarTransferenciasTicketsV2(arr));
+        for (const [contacto, arr] of Object.entries(grupos)) {
+            console.log(`[consolidarTicketsCsvs] Procesando grupo de contacto ${contacto} con ${arr.length} tickets`);
+            const procesados = procesarTransferenciasTicketsV2(arr);
+            ticketsProcesados.push(...procesados);
         }
+        
+        console.log(`[consolidarTicketsCsvs] Total tickets procesados: ${ticketsProcesados.length}`);
+        
         // Orden de columnas solicitado
         const camposPrincipales = [
             'id', 'sequentialId', 'status', 'team', 'unreadMessages',
@@ -571,7 +588,8 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia',
             'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
         ];
-        // Detectar campos extra (por si hay columnas adicionales)
+        
+        // Detectar campos extra (por si hay columnas adicionales de plantillas)
         const camposExtra = [];
         ticketsProcesados.forEach(t => {
             Object.keys(t).forEach(k => {
@@ -580,17 +598,30 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 }
             });
         });
+        
         const camposFinal = [...camposPrincipales, ...camposTransferencia, ...camposExtra];
+        console.log(`[consolidarTicketsCsvs] Campos finales: ${camposFinal.length} campos`);
+        
         // Generar CSV
         const parser = new Parser({ fields: camposFinal, header: true });
         const csv = parser.parse(ticketsProcesados);
-        // Guardar archivo
-        const now = new Date();
-        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
-        const fecha = now.toISOString().slice(0,10);
-        const nombreArchivo = `tickets_consolidado_${hora}_${fecha}.csv`;
+        
+        // Guardar archivo con nombre tickets_bot.csv
+        const nombreArchivo = 'tickets_bot.csv';
         const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
         fs.writeFileSync(rutaConsolidada, csv);
+        
+        console.log(`[consolidarTicketsCsvs] Archivo consolidado generado: ${rutaConsolidada}`);
+        console.log(`[consolidarTicketsCsvs] Resumen de transferencias:`);
+        
+        // Log de resumen de transferencias
+        const transferencias = ticketsProcesados.filter(t => t.transferencia === 'TRUE');
+        const ticketsRaiz = ticketsProcesados.filter(t => t.transferencia === 'FALSE');
+        
+        console.log(`  - Tickets raíz: ${ticketsRaiz.length}`);
+        console.log(`  - Transferencias: ${transferencias.length}`);
+        console.log(`  - Total: ${ticketsProcesados.length}`);
+        
         return rutaConsolidada;
     } catch (error) {
         console.error('[consolidarTicketsCsvs] Error:', error);
@@ -1093,6 +1124,7 @@ const procesarTickets = async (jsonData, outputPath, plantillasRegistradas = new
                 // Campos básicos del ticket
                 id: ticket.id || '',
                 sequentialId: content.sequentialId || '',
+                parentSequentialId: content.parentSequentialId || '',
                 status: content.status || '',
                 team: content.team || '',
                 unreadMessages: content.unreadMessages || '',
@@ -1121,7 +1153,7 @@ const procesarTickets = async (jsonData, outputPath, plantillasRegistradas = new
         });
 
         const campos = [
-            'id', 'sequentialId', 'status', 'team', 'unreadMessages',
+            'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
             'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
             'origen', 'nombrePlantilla', 'agenteEnvio',
             'fechaFiltro', 'tipoDato', 'procesadoEn'
