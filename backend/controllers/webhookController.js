@@ -83,6 +83,9 @@ const handleWebhook = async (req, res) => {
         }
 
         // --- LÓGICA MEJORADA DE TRACKING DE CAMPAÑAS ---
+        // Identificar el tipo de JSON de BLiP antes de procesar
+        const tipo = identificarTipoJson(jsonData);
+        
         if (tipo === 'plantilla') {
             const templateName = jsonData.content?.template?.name;
             const to = jsonData.to;
@@ -314,10 +317,8 @@ const handleWebhook = async (req, res) => {
         }
         
         // --- LÓGICA MEJORADA DE TRACKING DE TICKETS ---
-        // Identificar el tipo de JSON de BLiP incluso si es una respuesta a un botón
-        const tipoIdentificado = identificarTipoJson(jsonData);
-        
-        if (!tipoIdentificado || tipoIdentificado === 'desconocido') {
+        // Validar que el tipo sea válido
+        if (!tipo || tipo === 'desconocido') {
             console.error('[Webhook] No se pudo identificar el tipo de datos del JSON recibido');
             return res.status(400).json({
                 success: false,
