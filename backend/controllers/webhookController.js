@@ -82,10 +82,6 @@ const handleWebhook = async (req, res) => {
             });
         }
 
-        // Identificar el tipo de dato
-        const tipo = identificarTipoJson(jsonData);
-        console.log('[Webhook] Tipo identificado:', tipo);
-        
         // --- LÓGICA MEJORADA DE TRACKING DE CAMPAÑAS ---
         if (tipo === 'plantilla') {
             const templateName = jsonData.content?.template?.name;
@@ -181,6 +177,142 @@ const handleWebhook = async (req, res) => {
             }
         }
         
+        // --- LÓGICA MEJORADA PARA TICKETS (tracking de conversaciones) ---
+        if (tipo === 'ticket' || tipo === 'mensaje') {
+            // Procesar cada elemento del webhook para tracking de tickets
+            const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+            for (const item of dataArray) {
+                const contactoIdentity = extraerContactoIdentity(item);
+                if (!contactoIdentity) continue;
+
+                // Si es un ticket de apertura
+                if (tipo === 'ticket' && item['type'] === 'application/vnd.iris.ticket+json') {
+                    const content = item.content || {};
+                    const metadata = item.metadata || {};
+                    const sequentialId = content.sequentialId;
+                    const parentSequentialId = content.parentSequentialId;
+                    const fechaApertura = metadata['#envelope.storageDate'] || content.storageDate || item.storageDate || new Date().toISOString();
+
+                    // MEJORADA: Determinar si es un ticket de campaña usando múltiples criterios
+                    const campaignDetails = campaignTracking.get(contactoIdentity);
+                    let ticketType = 'BOT';
+                    
+                    // Criterio 1: Si hay tracking de campaña para este contacto
+                    if (campaignDetails && campaignDetails.templateName) {
+                        ticketType = 'PLANTILLA';
+                    }
+                    // Criterio 2: Si el ticket tiene CampaignId en el content
+                    else if (content.CampaignId) {
+                        ticketType = 'PLANTILLA';
+                        // Si no teníamos tracking, crear uno básico
+                        if (!campaignDetails) {
+                            campaignTracking.set(contactoIdentity, {
+                                templateName: 'Plantilla sin nombre',
+                                originator: '',
+                                sentTime: fechaApertura,
+                                replied: false,
+                                replyContent: '',
+                                replyTime: '',
+                                templateContent: '',
+                                templateContentWithParams: '',
+                                campaignId: content.CampaignId
+                            });
+                        }
+                    }
+                    // Criterio 3: Si el ticket tiene metadata de ActiveCampaign
+                    else if (metadata['#activecampaign.flowId'] || metadata['#activecampaign.name']) {
+                        ticketType = 'PLANTILLA';
+                    }
+
+                    const finalCampaignDetails = campaignTracking.get(contactoIdentity);
+                    
+                    // NUEVA LÓGICA: Manejar transferencias como tickets individuales
+                    // Si es un ticket con parentSequentialId, es una transferencia
+                    if (parentSequentialId) {
+                        // Es un ticket hijo (transferencia)
+                        console.log(`[Ticket] TRANSFERENCIA detectada - Hijo: ${sequentialId}, Padre: ${parentSequentialId}`);
+                        
+                        // Crear un nuevo ticket para la transferencia
+                        const ticketKey = `${contactoIdentity}_${sequentialId}`;
+                        ticketsAbiertos.set(ticketKey, {
+                            ticket: item,
+                            mensajes: [],
+                            eventos: [],
+                            cerrado: false,
+                            fechaCierre: null,
+                            fechaApertura: fechaApertura,
+                            contacto: contactoIdentity.split('@')[0],
+                            tipo: ticketType,
+                            campaignDetails: finalCampaignDetails || null,
+                            sequentialId: sequentialId,
+                            parentSequentialId: parentSequentialId,
+                            isTransfer: true,
+                            transferType: content.team === 'DIRECT_TRANSFER' ? 'AGENTE' : 'COLA',
+                            agentIdentity: content.agentIdentity || '',
+                            team: content.team || ''
+                        });
+                        
+                        console.log(`[Ticket] Ticket de transferencia creado: ${ticketKey} - Tipo: ${ticketType}, Transfer: ${content.team}`);
+                        
+                    } else {
+                        // Es un ticket raíz (sin transferencia o primer ticket)
+                        console.log(`[Ticket] TICKET RAÍZ detectado - SequentialId: ${sequentialId}`);
+                        
+                        // Si ya existe un ticket abierto para este contacto, cerrarlo primero
+                        const existingTicket = ticketsAbiertos.get(contactoIdentity);
+                        if (existingTicket && !existingTicket.cerrado) {
+                            console.log(`[Ticket] Cerrando ticket anterior para ${contactoIdentity}`);
+                            existingTicket.cerrado = true;
+                            existingTicket.fechaCierre = fechaApertura;
+                            existingTicket.tipoCierre = 'Transferencia';
+                        }
+                        
+                        // Crear nuevo ticket raíz
+                        ticketsAbiertos.set(contactoIdentity, {
+                            ticket: item,
+                            mensajes: [],
+                            eventos: [],
+                            cerrado: false,
+                            fechaCierre: null,
+                            fechaApertura: fechaApertura,
+                            contacto: contactoIdentity.split('@')[0],
+                            tipo: ticketType,
+                            campaignDetails: finalCampaignDetails || null,
+                            sequentialId: sequentialId,
+                            parentSequentialId: null,
+                            isTransfer: false,
+                            transferType: '',
+                            agentIdentity: '',
+                            team: content.team || ''
+                        });
+                        
+                        console.log(`[Ticket] Ticket raíz creado para ${contactoIdentity} (seqId: ${sequentialId}) - Tipo: ${ticketType}`);
+                    }
+                    
+                    // Una vez que el ticket se abre, podemos limpiar el tracking para este contacto
+                    if (finalCampaignDetails) {
+                        campaignTracking.delete(contactoIdentity);
+                    }
+                }
+
+                // Si ya existe un ticket para este contacto, procesar mensajes
+                // Buscar tanto el ticket principal como los de transferencia
+                const ticketKeys = Array.from(ticketsAbiertos.keys()).filter(key => 
+                    key === contactoIdentity || key.startsWith(`${contactoIdentity}_`)
+                );
+                
+                for (const ticketKey of ticketKeys) {
+                    const ticketInfo = ticketsAbiertos.get(ticketKey);
+                    if (ticketInfo && !ticketInfo.cerrado) {
+                        // Agregar mensajes
+                        if (tipo === 'mensaje') {
+                            ticketInfo.mensajes.push(item);
+                        }
+                    }
+                }
+            }
+        }
+        
         // --- LÓGICA MEJORADA DE TRACKING DE TICKETS ---
         // Identificar el tipo de JSON de BLiP incluso si es una respuesta a un botón
         const tipoIdentificado = identificarTipoJson(jsonData);
@@ -220,93 +352,6 @@ const handleWebhook = async (req, res) => {
                 break;
             default:
                 throw new Error(`Tipo no soportado: ${tipo}`);
-        }
-
-        // --- LÓGICA MEJORADA PARA TICKETS (tracking de conversaciones) ---
-        if (tipo === 'ticket' || tipo === 'mensaje') {
-            // Procesar cada elemento del webhook para tracking de tickets
-            const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
-            for (const item of dataArray) {
-                const contactoIdentity = extraerContactoIdentity(item);
-                if (!contactoIdentity) continue;
-
-                // Si es un ticket de apertura
-                if (tipo === 'ticket' && item['type'] === 'application/vnd.iris.ticket+json') {
-                    if (!ticketsAbiertos.has(contactoIdentity) || ticketsAbiertos.get(contactoIdentity).cerrado) {
-                        const content = item.content || {};
-                        const metadata = item.metadata || {};
-                        const fechaApertura = metadata['#envelope.storageDate'] || content.storageDate || item.storageDate || new Date().toISOString();
-
-                        // MEJORADA: Determinar si es un ticket de campaña usando múltiples criterios
-                        const campaignDetails = campaignTracking.get(contactoIdentity);
-                        let ticketType = 'BOT';
-                        
-                        // Criterio 1: Si hay tracking de campaña para este contacto
-                        if (campaignDetails && campaignDetails.templateName) {
-                            ticketType = 'PLANTILLA';
-                        }
-                        // Criterio 2: Si el ticket tiene CampaignId en el content
-                        else if (content.CampaignId) {
-                            ticketType = 'PLANTILLA';
-                            // Si no teníamos tracking, crear uno básico
-                            if (!campaignDetails) {
-                                campaignTracking.set(contactoIdentity, {
-                                    templateName: 'Plantilla sin nombre',
-                                    originator: '',
-                                    sentTime: fechaApertura,
-                                    replied: false,
-                                    replyContent: '',
-                                    replyTime: '',
-                                    templateContent: '',
-                                    templateContentWithParams: '',
-                                    campaignId: content.CampaignId
-                                });
-                            }
-                        }
-                        // Criterio 3: Si el ticket tiene metadata de ActiveCampaign
-                        else if (metadata['#activecampaign.flowId'] || metadata['#activecampaign.name']) {
-                            ticketType = 'PLANTILLA';
-                        }
-
-                        const finalCampaignDetails = campaignTracking.get(contactoIdentity);
-                        
-                        ticketsAbiertos.set(contactoIdentity, {
-                            ticket: item,
-                            mensajes: [],
-                            eventos: [],
-                            cerrado: false,
-                            fechaCierre: null,
-                            fechaApertura: fechaApertura,
-                            contacto: contactoIdentity.split('@')[0], // Guardar solo el número para la columna 'contacto'
-                            tipo: ticketType,
-                            campaignDetails: finalCampaignDetails || null,
-                        });
-                        console.log(`[Ticket] Caja ABIERTA para contacto ${contactoIdentity} (seqId: ${content.sequentialId}) - Tipo: ${ticketType}`, {
-                            campaignDetails: finalCampaignDetails ? {
-                                templateName: finalCampaignDetails.templateName,
-                                originator: finalCampaignDetails.originator,
-                                campaignId: finalCampaignDetails.campaignId,
-                                templateContentWithParams: finalCampaignDetails.templateContentWithParams
-                            } : null,
-                            campaignId: content.CampaignId
-                        });
-                        
-                        // Una vez que el ticket se abre, podemos limpiar el tracking para este contacto
-                        if (finalCampaignDetails) {
-                            campaignTracking.delete(contactoIdentity);
-                        }
-                    }
-                }
-
-                // Si ya existe un ticket para este contacto, procesar mensajes
-                const ticketInfo = ticketsAbiertos.get(contactoIdentity);
-                if (ticketInfo && !ticketInfo.cerrado) {
-                    // Agregar mensajes
-                    if (tipo === 'mensaje') {
-                        ticketInfo.mensajes.push(item);
-                    }
-                }
-            }
         }
 
         res.status(200).json({
@@ -559,37 +604,48 @@ const handleBotEvent = async (req, res) => {
         
         // Si es finalización de ticket, buscar el ticket abierto correspondiente
         if (eventoBot.ticketFinalizo) {
-            const ticketInfo = ticketsAbiertos.get(contactoIdentity);
-            if (ticketInfo && !ticketInfo.cerrado) {
-                // Marcar ticket como cerrado
-                ticketInfo.cerrado = true;
-                ticketInfo.fechaCierre = eventoBot.timestamp;
-                ticketInfo.correoAgente = correoAgente;
-                ticketInfo.tipoCierre = tipoCierre || '';
-
-                // Calcular y guardar la duración del ticket
-                const duracion = calcularDuracionTicket(ticketInfo.fechaApertura, ticketInfo.fechaCierre);
-                ticketInfo.duracion = duracion;
-                
-                console.log(`[BotEvent] Ticket cerrado para contacto ${contactoIdentity} por agente ${correoAgente}. Duración: ${duracion}`);
-                
-                // Generar archivo individual del ticket con información del agente y tipoCierre
-                try {
-                    const carpeta = obtenerRutaCarpeta('ticket');
-                    const rutaCarpeta = path.join(__dirname, '..', carpeta);
-                    
-                    // Agregar información del agente y tipoCierre al ticket
-                    ticketInfo.agente = correoAgente;
+            // Buscar todos los tickets abiertos para este contacto (incluyendo transferencias)
+            const ticketKeys = Array.from(ticketsAbiertos.keys()).filter(key => 
+                key === contactoIdentity || key.startsWith(`${contactoIdentity}_`)
+            );
+            
+            console.log(`[BotEvent] Buscando tickets para cerrar en contacto ${contactoIdentity}. Keys encontrados:`, ticketKeys);
+            
+            for (const ticketKey of ticketKeys) {
+                const ticketInfo = ticketsAbiertos.get(ticketKey);
+                if (ticketInfo && !ticketInfo.cerrado) {
+                    // Marcar ticket como cerrado
+                    ticketInfo.cerrado = true;
                     ticketInfo.fechaCierre = eventoBot.timestamp;
+                    ticketInfo.correoAgente = correoAgente;
                     ticketInfo.tipoCierre = tipoCierre || '';
+
+                    // Calcular y guardar la duración del ticket
+                    const duracion = calcularDuracionTicket(ticketInfo.fechaApertura, ticketInfo.fechaCierre);
+                    ticketInfo.duracion = duracion;
                     
-                    generarTicketIndividual(ticketInfo, rutaCarpeta);
-                    console.log(`[BotEvent] Archivo individual generado para contacto ${contactoIdentity}`);
-                } catch (error) {
-                    console.error(`[BotEvent] Error al generar archivo individual para contacto ${contactoIdentity}:`, error);
+                    console.log(`[BotEvent] Ticket cerrado: ${ticketKey} por agente ${correoAgente}. Duración: ${duracion}`);
+                    
+                    // Generar archivo individual del ticket con información del agente y tipoCierre
+                    try {
+                        const carpeta = obtenerRutaCarpeta('ticket');
+                        const rutaCarpeta = path.join(__dirname, '..', carpeta);
+                        
+                        // Agregar información del agente y tipoCierre al ticket
+                        ticketInfo.agente = correoAgente;
+                        ticketInfo.fechaCierre = eventoBot.timestamp;
+                        ticketInfo.tipoCierre = tipoCierre || '';
+                        
+                        generarTicketIndividual(ticketInfo, rutaCarpeta);
+                        console.log(`[BotEvent] Archivo individual generado para ticket: ${ticketKey}`);
+                    } catch (error) {
+                        console.error(`[BotEvent] Error al generar archivo individual para ticket ${ticketKey}:`, error);
+                    }
                 }
-            } else {
-                console.log(`[BotEvent] No se encontró ticket abierto para contacto ${contactoIdentity}`);
+            }
+            
+            if (ticketKeys.length === 0) {
+                console.log(`[BotEvent] No se encontraron tickets abiertos para contacto ${contactoIdentity}`);
             }
         }
         

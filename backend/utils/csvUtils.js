@@ -350,6 +350,43 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             TIPO: tipoTicket
         };
         
+        // --- AGREGAR CAMPOS DE TRANSFERENCIA ---
+        // Determinar si es transferencia y tipo
+        const isTransfer = ticketInfo.isTransfer || false;
+        const parentSeqId = ticketInfo.parentSequentialId || content.parentSequentialId || '';
+        const transferType = ticketInfo.transferType || '';
+        const agentIdentity = ticketInfo.agentIdentity || content.agentIdentity || '';
+        
+        // Campos de transferencia
+        ticketData.transferencia = isTransfer ? 'TRUE' : 'FALSE';
+        ticketData.ticket_padre = isTransfer ? parentSeqId : '';
+        ticketData.ticket_hijo = '';
+        ticketData.tipo_transferencia = isTransfer ? transferType : '';
+        ticketData.agente_transferido = '';
+        ticketData.cola_transferida = '';
+        ticketData.historial_transferencias = '';
+        ticketData.cantidad_transferencias = 0;
+        
+        // Si es transferencia, procesar información específica
+        if (isTransfer) {
+            if (transferType === 'AGENTE' && agentIdentity) {
+                try {
+                    // Decodificar el agentIdentity (ej: "hola%40bewise.com.es@blip.ai")
+                    const decodedAgent = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                    ticketData.agente_transferido = decodedAgent;
+                } catch {
+                    ticketData.agente_transferido = agentIdentity;
+                }
+                ticketData.cola_transferida = 'DIRECT_TRANSFER';
+            } else if (transferType === 'COLA') {
+                ticketData.cola_transferida = content.team || '';
+            }
+            
+            // Historial básico para transferencias individuales
+            ticketData.historial_transferencias = `${parentSeqId} → ${content.sequentialId}`;
+            ticketData.cantidad_transferencias = 1;
+        }
+        
         let campos;
 
         // --- Añadir campos específicos y definir columnas ---
@@ -384,14 +421,16 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
                 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO'
+                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
             ];
         } else { // BOT
             // Asegurar que los tickets BOT tengan todos los campos requeridos
             campos = [
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
                 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
-                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO'
+                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
             ];
         }
 
@@ -443,11 +482,11 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
 };
 
 /**
- * Procesa y agrega información de transferencias a los tickets de un contacto (v3: usa parentSequentialId y logs detallados)
+ * Procesa y agrega información de transferencias a los tickets de un contacto (v4: maneja tickets individuales y crea historial completo)
  * @param {Array} tickets - Array de tickets de un contacto
  * @returns {Array} - Array de tickets con columnas de transferencia
  */
-function procesarTransferenciasTicketsV2(tickets) {
+function procesarTransferenciasTicketsV4(tickets) {
     // Ordenar por storageDate o sequentialId para asegurar el orden cronológico
     tickets.sort((a, b) => {
         const sa = a.storageDate || a['storageDate'] || '';
@@ -456,33 +495,79 @@ function procesarTransferenciasTicketsV2(tickets) {
         // Fallback por sequentialId si no hay storageDate
         return (parseInt(a.sequentialId) || 0) - (parseInt(b.sequentialId) || 0);
     });
+    
     // Crear un mapa de sequentialId a ticket para lookup rápido
     const mapaSeq = {};
     tickets.forEach(t => {
         if (t.sequentialId) mapaSeq[t.sequentialId] = t;
     });
-    // Historial de transferencias (sequentialId)
-    let historial = [];
-    let cantidad_transferencias = 0;
+    
+    // Crear mapa de parentSequentialId a hijos
+    const mapaHijos = {};
+    tickets.forEach(t => {
+        const parentSeq = t.parentSequentialId || t['parentSequentialId'] || '';
+        if (parentSeq) {
+            if (!mapaHijos[parentSeq]) mapaHijos[parentSeq] = [];
+            mapaHijos[parentSeq].push(t);
+        }
+    });
+    
     let resultado = [];
+    
     for (let i = 0; i < tickets.length; i++) {
         const t = tickets[i];
+        const parentSeq = t.parentSequentialId || t['parentSequentialId'] || '';
+        const sequentialId = t.sequentialId || '';
+        
+        // Determinar si es transferencia
+        const esTransferencia = parentSeq && mapaSeq[parentSeq];
+        
+        // Obtener hijos de este ticket
+        const hijos = mapaHijos[sequentialId] || [];
+        
+        // Crear historial completo
+        let historial = [];
+        let cantidad_transferencias = 0;
+        
+        if (esTransferencia) {
+            // Es un ticket hijo, construir historial desde el padre
+            let ticketActual = t;
+            while (ticketActual.parentSequentialId && mapaSeq[ticketActual.parentSequentialId]) {
+                historial.unshift(ticketActual.sequentialId);
+                ticketActual = mapaSeq[ticketActual.parentSequentialId];
+                cantidad_transferencias++;
+            }
+            // Agregar el ticket raíz al inicio
+            historial.unshift(ticketActual.sequentialId);
+        } else {
+            // Es un ticket raíz, construir historial hacia adelante
+            historial = [sequentialId];
+            let ticketActual = t;
+            while (mapaHijos[ticketActual.sequentialId] && mapaHijos[ticketActual.sequentialId].length > 0) {
+                const hijo = mapaHijos[ticketActual.sequentialId][0]; // Tomar el primer hijo
+                historial.push(hijo.sequentialId);
+                ticketActual = hijo;
+                cantidad_transferencias++;
+            }
+        }
+        
+        // Determinar información de transferencia
         let transferencia = 'FALSE';
         let ticket_padre = '';
         let ticket_hijo = '';
         let tipo_transferencia = '';
         let agente_transferido = '';
         let cola_transferida = '';
-        let historial_transferencias = '';
-        // Detectar transferencia por parentSequentialId
-        const parentSeq = t.parentSequentialId || t['parentSequentialId'] || '';
-        if (parentSeq && mapaSeq[parentSeq]) {
+        
+        if (esTransferencia) {
             transferencia = 'TRUE';
             ticket_padre = parentSeq;
-            ticket_hijo = t.sequentialId || '';
+            ticket_hijo = sequentialId;
+            
             // Detectar tipo de transferencia
             const team = t.team || t['team'] || '';
             const agentIdentity = t.agentIdentity || t['agentIdentity'] || '';
+            
             if (team === 'DIRECT_TRANSFER' && agentIdentity) {
                 tipo_transferencia = 'AGENTE';
                 try {
@@ -495,19 +580,33 @@ function procesarTransferenciasTicketsV2(tickets) {
                 tipo_transferencia = 'COLA';
                 cola_transferida = team;
             }
-            cantidad_transferencias++;
-            historial.push(ticket_hijo);
-            historial_transferencias = historial.join('→');
-            console.log(`[TRANSFERENCIA] Ticket hijo: ${ticket_hijo} (padre: ${ticket_padre}) - Tipo: ${tipo_transferencia} - Agente: ${agente_transferido} - Cola: ${cola_transferida}`);
-        } else {
-            // No es transferencia, es ticket raíz o no tiene parent
-            if (t.sequentialId) historial = [t.sequentialId];
-            cantidad_transferencias = 0;
-            historial_transferencias = historial.join('→');
-            // Log para ticket raíz
-            console.log(`[TICKET RAÍZ] Ticket: ${t.sequentialId || ''}`);
+        } else if (hijos.length > 0) {
+            // Es un ticket padre que tiene transferencias
+            transferencia = 'TRUE';
+            ticket_hijo = hijos[0].sequentialId;
+            
+            // Detectar tipo de transferencia del primer hijo
+            const primerHijo = hijos[0];
+            const team = primerHijo.team || primerHijo['team'] || '';
+            const agentIdentity = primerHijo.agentIdentity || primerHijo['agentIdentity'] || '';
+            
+            if (team === 'DIRECT_TRANSFER' && agentIdentity) {
+                tipo_transferencia = 'AGENTE';
+                try {
+                    agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                } catch {
+                    agente_transferido = agentIdentity;
+                }
+                cola_transferida = 'DIRECT_TRANSFER';
+            } else if (team && team !== 'DIRECT_TRANSFER') {
+                tipo_transferencia = 'COLA';
+                cola_transferida = team;
+            }
         }
-        // Agregar columnas
+        
+        const historial_transferencias = historial.join(' → ');
+        
+        // Agregar columnas de transferencia
         t.transferencia = transferencia;
         t.ticket_padre = ticket_padre;
         t.ticket_hijo = ticket_hijo;
@@ -516,8 +615,12 @@ function procesarTransferenciasTicketsV2(tickets) {
         t.cola_transferida = cola_transferida;
         t.historial_transferencias = historial_transferencias;
         t.cantidad_transferencias = cantidad_transferencias;
+        
         resultado.push(t);
+        
+        console.log(`[TRANSFERENCIA V4] Ticket: ${sequentialId}, Transferencia: ${transferencia}, Historial: ${historial_transferencias}, Cantidad: ${cantidad_transferencias}`);
     }
+    
     return resultado;
 }
 
@@ -572,7 +675,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         let ticketsProcesados = [];
         for (const [contacto, arr] of Object.entries(grupos)) {
             console.log(`[consolidarTicketsCsvs] Procesando grupo de contacto ${contacto} con ${arr.length} tickets`);
-            const procesados = procesarTransferenciasTicketsV2(arr);
+            const procesados = procesarTransferenciasTicketsV4(arr);
             ticketsProcesados.push(...procesados);
         }
         
@@ -1451,5 +1554,6 @@ module.exports = {
     procesarPlantillas,
     consolidarCampanas,
     obtenerCampanasDisponibles,
-    generarResumenDeCampanas
+    generarResumenDeCampanas,
+    procesarTransferenciasTicketsV4
 }; 
