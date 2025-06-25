@@ -664,6 +664,9 @@ app.post('/api/identificar-ticket', async (req, res) => {
     }
 });
 
+// Ruta de debug para verificar estado de archivos
+app.get('/api/debug/files', reportController.debugFiles);
+
 // Iniciar el servidor
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);

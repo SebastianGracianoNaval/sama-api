@@ -638,26 +638,43 @@ function procesarTransferenciasTicketsV4(tickets) {
  */
 const consolidarTicketsCsvs = async (directorio, fechas = null) => {
     try {
+        console.log(`[consolidarTicketsCsvs] Iniciando consolidación - directorio: ${directorio}`);
+        console.log(`[consolidarTicketsCsvs] Fechas recibidas:`, fechas);
+        
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        console.log(`[consolidarTicketsCsvs] Carpeta reportes: ${carpetaReportes}`);
+        console.log(`[consolidarTicketsCsvs] ¿Existe carpeta reportes?: ${fs.existsSync(carpetaReportes)}`);
+        
         if (!fs.existsSync(carpetaReportes)) {
+            console.log(`[consolidarTicketsCsvs] Carpeta reportes no existe, creando...`);
+            fs.mkdirSync(carpetaReportes, { recursive: true });
+            console.log(`[consolidarTicketsCsvs] Carpeta reportes creada`);
             return { botPath: null, plantillaPath: null };
         }
         
-        const archivos = fs.readdirSync(carpetaReportes)
-            .filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+        const archivos = fs.readdirSync(carpetaReportes);
+        console.log(`[consolidarTicketsCsvs] Todos los archivos en reportes:`, archivos);
+        
+        const archivosAtencion = archivos.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+        console.log(`[consolidarTicketsCsvs] Archivos de atención filtrados:`, archivosAtencion);
             
-        if (archivos.length === 0) {
+        if (archivosAtencion.length === 0) {
+            console.log(`[consolidarTicketsCsvs] No hay archivos de atención para procesar`);
             return { botPath: null, plantillaPath: null };
         }
         
-        console.log(`[consolidarTicketsCsvs] Archivos de atención encontrados: ${archivos.length}`);
+        console.log(`[consolidarTicketsCsvs] Archivos de atención encontrados: ${archivosAtencion.length}`);
         
         // Leer y parsear todos los archivos de atención
         let todosLosTickets = [];
-        for (const archivo of archivos) {
+        for (const archivo of archivosAtencion) {
             const rutaArchivo = path.join(carpetaReportes, archivo);
+            console.log(`[consolidarTicketsCsvs] Procesando archivo: ${rutaArchivo}`);
+            
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
             const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+            console.log(`[consolidarTicketsCsvs] Registros leídos de ${archivo}: ${registros.length}`);
+            
             todosLosTickets.push(...registros);
         }
         

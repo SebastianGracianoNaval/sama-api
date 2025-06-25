@@ -33,6 +33,65 @@ const reportController = {
             });
         }
     },
+    
+    // Ruta de debug para verificar estado de archivos
+    debugFiles: async (req, res) => {
+        try {
+            console.log('[ReportController] Debug de archivos solicitado');
+            
+            const carpetaTickets = path.join(__dirname, '..', 'data', 'tickets');
+            const carpetaReportes = path.join(__dirname, '..', 'data', 'reportes');
+            
+            const debugInfo = {
+                directorioActual: process.cwd(),
+                __dirname: __dirname,
+                carpetaTickets: {
+                    ruta: carpetaTickets,
+                    existe: fs.existsSync(carpetaTickets),
+                    archivos: []
+                },
+                carpetaReportes: {
+                    ruta: carpetaReportes,
+                    existe: fs.existsSync(carpetaReportes),
+                    archivos: [],
+                    archivosAtencion: []
+                },
+                variablesEntorno: {
+                    NODE_ENV: process.env.NODE_ENV,
+                    PORT: process.env.PORT
+                }
+            };
+            
+            // Verificar contenido de carpetas
+            if (fs.existsSync(carpetaTickets)) {
+                debugInfo.carpetaTickets.archivos = fs.readdirSync(carpetaTickets);
+            }
+            
+            if (fs.existsSync(carpetaReportes)) {
+                const archivosReportes = fs.readdirSync(carpetaReportes);
+                debugInfo.carpetaReportes.archivos = archivosReportes;
+                debugInfo.carpetaReportes.archivosAtencion = archivosReportes.filter(archivo => 
+                    archivo.startsWith('atencion_') && archivo.endsWith('.csv')
+                );
+            }
+            
+            console.log('[ReportController] Debug info:', JSON.stringify(debugInfo, null, 2));
+            
+            res.json({
+                success: true,
+                debugInfo: debugInfo
+            });
+            
+        } catch (error) {
+            console.error('[ReportController] Error en debug:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error en debug',
+                error: error.message
+            });
+        }
+    },
+    
     // Descargar reporte específico
     downloadReporte: async (req, res) => {
         try {
@@ -90,19 +149,45 @@ const reportController = {
                 console.log('[ReportController] Procesando consolidación de tickets');
                 
                 const carpeta = path.join(__dirname, '..', 'data', 'tickets');
+                console.log(`[ReportController] Carpeta de tickets: ${carpeta}`);
+                console.log(`[ReportController] ¿Existe carpeta?: ${fs.existsSync(carpeta)}`);
+                
                 if (!fs.existsSync(carpeta)) {
+                    console.log(`[ReportController] Carpeta de tickets no existe: ${carpeta}`);
                     return res.status(404).json({
                         success: false,
                         message: 'No se encontró el directorio de tickets.'
                     });
                 }
                 
+                // Verificar contenido de la carpeta tickets
+                const archivosTickets = fs.readdirSync(carpeta);
+                console.log(`[ReportController] Archivos en carpeta tickets:`, archivosTickets);
+                
+                // Verificar carpeta reportes
+                const carpetaReportes = path.join(path.dirname(carpeta), 'reportes');
+                console.log(`[ReportController] Carpeta reportes: ${carpetaReportes}`);
+                console.log(`[ReportController] ¿Existe carpeta reportes?: ${fs.existsSync(carpetaReportes)}`);
+                
+                if (fs.existsSync(carpetaReportes)) {
+                    const archivosReportes = fs.readdirSync(carpetaReportes);
+                    console.log(`[ReportController] Archivos en carpeta reportes:`, archivosReportes);
+                    
+                    // Buscar archivos de atención específicamente
+                    const archivosAtencion = archivosReportes.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+                    console.log(`[ReportController] Archivos de atención encontrados:`, archivosAtencion);
+                }
+                
                 const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
+                console.log(`[ReportController] Fechas para filtrado:`, fechas);
                 
                 // Consolidar tickets en dos archivos separados
+                console.log(`[ReportController] Llamando a consolidarTicketsCsvs...`);
                 const { botPath, plantillaPath } = await consolidarTicketsCsvs(carpeta, fechas);
+                console.log(`[ReportController] Resultado consolidarTicketsCsvs - botPath: ${botPath}, plantillaPath: ${plantillaPath}`);
                 
                 if (!botPath && !plantillaPath) {
+                    console.log(`[ReportController] No se encontraron archivos de tickets para consolidar`);
                     return res.status(404).json({
                         success: false,
                         message: 'No hay datos de tickets para exportar.'
@@ -110,7 +195,9 @@ const reportController = {
                 }
                 
                 // Crear ZIP con los dos archivos
+                console.log(`[ReportController] Creando ZIP con archivos...`);
                 const zipPath = await crearZipTickets(botPath, plantillaPath, carpeta);
+                console.log(`[ReportController] ZIP creado en: ${zipPath}`);
                 
                 // Establecer el header Content-Disposition
                 const nombreArchivo = `tickets_${new Date().toISOString().slice(0, 10)}.zip`;

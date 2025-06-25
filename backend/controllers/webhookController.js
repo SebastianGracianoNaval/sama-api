@@ -8,7 +8,8 @@ const {
     consolidarTicketsCsvs, 
     consolidarCampanas,
     obtenerCampanasDisponibles,
-    generarTicketIndividual 
+    generarTicketIndividual,
+    generarAtencionCompleta
 } = require('../utils/csvUtils');
 const { identificarTipoJson, obtenerRutaCarpeta, generarNombreArchivo, extraerInfoPlantilla } = require('../utils/blipUtils');
 const path = require('path');
