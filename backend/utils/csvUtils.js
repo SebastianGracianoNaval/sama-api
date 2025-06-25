@@ -348,11 +348,15 @@ const generarAtencionCompleta = (atencion, directorio) => {
             const parentSeqId = content.parentSequentialId || '';
             const agentIdentity = ticketInfo.agentIdentity || content.agentIdentity || '';
             
+            // Determinar si es el último ticket de la atención (el que no tiene hijos)
+            const hijos = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
+            const esUltimoTicket = hijos.length === 0;
+            
             // Campos de transferencia
-            ticketData.transferencia = isTransfer ? 'TRUE' : 'FALSE';
+            ticketData.transferencia = 'FALSE'; // Por defecto FALSE
             ticketData.ticket_padre = isTransfer ? parentSeqId : '';
             ticketData.ticket_hijo = '';
-            ticketData.tipo_transferencia = isTransfer ? (content.team === 'DIRECT_TRANSFER' ? 'AGENTE' : 'COLA') : '';
+            ticketData.tipo_transferencia = '';
             ticketData.agente_transferido = '';
             ticketData.cola_transferida = '';
             ticketData.historial_transferencias = '';
@@ -376,9 +380,9 @@ const generarAtencionCompleta = (atencion, directorio) => {
                 ticketData.historial_transferencias = `${parentSeqId} → ${content.sequentialId}`;
                 ticketData.cantidad_transferencias = 1;
             } else {
-                // Es un ticket padre, buscar si tiene hijos para completar la información
-                const hijos = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
+                // Es un ticket padre, verificar si tiene hijos
                 if (hijos.length > 0) {
+                    // Marcar como transferencia TRUE solo si NO es el último ticket
                     ticketData.transferencia = 'TRUE';
                     ticketData.ticket_hijo = hijos[0].sequentialId;
                     
