@@ -2,6 +2,7 @@ const { Parser } = require('json2csv');
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
+const archiver = require('archiver');
 
 /**
  * Convierte un objeto JSON a formato CSV
@@ -233,231 +234,238 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
 };
 
 /**
- * Genera un archivo CSV individual para un ticket cerrado con estructura limpia
- * @param {Object} ticketInfo - Información del ticket cerrado
+ * Genera un archivo CSV para una atención completa con todos sus tickets
+ * @param {Object} atencion - Información de la atención completa
  * @param {string} directorio - Directorio base donde guardar el archivo
- * @param {Map} ticketsAbiertos - Mapa de tickets abiertos para buscar relaciones (opcional)
  * @returns {string} - Ruta del archivo generado
  */
-const generarTicketIndividual = (ticketInfo, directorio, ticketsAbiertos = null) => {
+const generarAtencionCompleta = (atencion, directorio) => {
     try {
-        const ticket = ticketInfo.ticket;
-        const content = ticket.content || {};
-        const metadata = ticket.metadata || {};
-        const seqId = content.sequentialId;
-        const contacto = ticketInfo.contacto;
-        const tipoTicket = ticketInfo.tipo || 'BOT';
-
-        // Ordenar mensajes por fecha
-        ticketInfo.mensajes.sort((a, b) => {
-            const fa = new Date(a['metadata.#envelope.storageDate'] || a['storageDate'] || 0).getTime();
-            const fb = new Date(b['metadata.#envelope.storageDate'] || b['storageDate'] || 0).getTime();
-            return fa - fb;
-        });
+        const contacto = atencion.contacto;
+        const tipoBase = atencion.tipoBase; // BOT o PLANTILLA
+        const fechaApertura = atencion.fechaApertura;
+        const fechaCierre = atencion.fechaCierre;
+        const duracionTotal = atencion.duracionTotal;
         
-        // --- Extraer Primer Contacto del Agente ---
-        const primerMensajeAgente = ticketInfo.mensajes.find(m => {
-            const from = m.from || '';
-            const messageEmitter = m.metadata?.['#messageEmitter'];
-            // Un mensaje es del agente si NO es del cliente de WhatsApp, O si está marcado como 'Human'
-            return (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || messageEmitter === 'Human';
-        });
+        // Generar ID único de atención
+        const atencionId = `atencion_${contacto}_${new Date(fechaApertura).toISOString().slice(0, 10)}`;
+        
+        console.log(`[generarAtencionCompleta] Generando atención: ${atencionId} - Tipo: ${tipoBase} - Tickets: ${atencion.tickets.length}`);
+        
+        // Procesar cada ticket de la atención
+        const ticketsProcesados = [];
+        
+        for (const ticketInfo of atencion.tickets) {
+            const ticket = ticketInfo.ticket;
+            const content = ticket.content || {};
+            const metadata = ticket.metadata || {};
+            const seqId = content.sequentialId;
+            const tipoTicket = ticketInfo.tipo; // BOT, PLANTILLA, o TRANSFERENCIA
 
-        let primerContacto = '';
-        if (primerMensajeAgente) {
-            // Buscar la fecha completa en múltiples campos posibles
-            let fechaCompleta = '';
+            // Ordenar mensajes por fecha
+            ticketInfo.mensajes.sort((a, b) => {
+                const fa = new Date(a['metadata.#envelope.storageDate'] || a['storageDate'] || 0).getTime();
+                const fb = new Date(b['metadata.#envelope.storageDate'] || b['storageDate'] || 0).getTime();
+                return fa - fb;
+            });
             
-            // Priorizar metadata.#envelope.storageDate (formato ISO completo)
-            if (primerMensajeAgente['metadata.#envelope.storageDate']) {
-                fechaCompleta = primerMensajeAgente['metadata.#envelope.storageDate'];
-            }
-            // Luego metadata.#wa.timestamp
-            else if (primerMensajeAgente['metadata.#wa.timestamp']) {
-                fechaCompleta = primerMensajeAgente['metadata.#wa.timestamp'];
-            }
-            // Luego storageDate directo
-            else if (primerMensajeAgente['storageDate']) {
-                fechaCompleta = primerMensajeAgente['storageDate'];
-            }
-            // Luego timestamp directo
-            else if (primerMensajeAgente['timestamp']) {
-                fechaCompleta = primerMensajeAgente['timestamp'];
-            }
-            // Si no hay fecha, usar la fecha actual
-            else {
-                fechaCompleta = new Date().toISOString();
-            }
-            
-            const contenido = primerMensajeAgente.content || '';
-            
-            // Asegurar que la fecha esté en formato ISO completo
-            if (fechaCompleta && !fechaCompleta.includes('T')) {
-                // Si es solo fecha (YYYY-MM-DD), convertir a ISO completo
-                try {
-                    const fechaObj = new Date(fechaCompleta);
-                    if (!isNaN(fechaObj.getTime())) {
-                        fechaCompleta = fechaObj.toISOString();
-                    }
-                } catch (e) {
-                    // Si falla, usar la fecha actual
+            // --- Extraer Primer Contacto del Agente ---
+            const primerMensajeAgente = ticketInfo.mensajes.find(m => {
+                const from = m.from || '';
+                const messageEmitter = m.metadata?.['#messageEmitter'];
+                return (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || messageEmitter === 'Human';
+            });
+
+            let primerContacto = '';
+            if (primerMensajeAgente) {
+                let fechaCompleta = '';
+                
+                if (primerMensajeAgente['metadata.#envelope.storageDate']) {
+                    fechaCompleta = primerMensajeAgente['metadata.#envelope.storageDate'];
+                } else if (primerMensajeAgente['metadata.#wa.timestamp']) {
+                    fechaCompleta = primerMensajeAgente['metadata.#wa.timestamp'];
+                } else if (primerMensajeAgente['storageDate']) {
+                    fechaCompleta = primerMensajeAgente['storageDate'];
+                } else if (primerMensajeAgente['timestamp']) {
+                    fechaCompleta = primerMensajeAgente['timestamp'];
+                } else {
                     fechaCompleta = new Date().toISOString();
                 }
-            }
-            
-            // Formatear como "FECHA_COMPLETA - CONTENIDO"
-            primerContacto = fechaCompleta ? `${fechaCompleta} - ${contenido}` : contenido;
-            
-            console.log(`[generarTicketIndividual] Primer contacto construido:`, {
-                fechaCompleta,
-                contenido,
-                primerContacto
-            });
-        }
-        
-        // Crear conversación con formato [agente]: y [cliente]:
-        const conversacion = ticketInfo.mensajes.map(m => {
-            const from = m.from || '';
-            const to = m.to || '';
-            let emisor = 'desconocido';
-            if ((from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || m.metadata?.['#messageEmitter'] === 'Human') {
-                emisor = 'agente';
-            } else if (from.includes('@wa.gw.msging.net')) {
-                emisor = 'cliente';
-            }
-            return `[${emisor}]: ${m.content || ''}`;
-        }).join('\\n');
-
-        // --- Preparar datos base del ticket ---
-        const ticketData = {
-            id: ticket.id || '',
-            sequentialId: content.sequentialId || '',
-            parentSequentialId: content.parentSequentialId || '',
-            status: content.status || '',
-            team: content.team || '',
-            unreadMessages: content.unreadMessages || 0,
-            storageDate: metadata['#envelope.storageDate'] || content.storageDate || '',
-            timestamp: metadata['#wa.timestamp'] || metadata['#envelope.storageDate'] || content.storageDate || '',
-            estadoTicket: 'cerrado',
-            fechaCierre: ticketInfo.fechaCierre || '',
-            tipoCierre: ticketInfo.tipoCierre || '',
-            fechaFiltro: obtenerFechaFiltro(ticket),
-            tipoDato: 'ticket_reporte',
-            procesadoEn: new Date().toISOString(),
-            conversacion: conversacion,
-            contacto: contacto,
-            agente: ticketInfo.correoAgente || '',
-            duracion: ticketInfo.duracion || '',
-            TIPO: tipoTicket
-        };
-        
-        // --- AGREGAR CAMPOS DE TRANSFERENCIA ---
-        // Determinar si es transferencia y tipo
-        const isTransfer = ticketInfo.isTransfer || false;
-        const parentSeqId = ticketInfo.parentSequentialId || content.parentSequentialId || '';
-        const transferType = ticketInfo.transferType || '';
-        const agentIdentity = ticketInfo.agentIdentity || content.agentIdentity || '';
-        
-        // Campos de transferencia
-        ticketData.transferencia = isTransfer ? 'TRUE' : 'FALSE';
-        ticketData.ticket_padre = isTransfer ? parentSeqId : '';
-        ticketData.ticket_hijo = '';
-        ticketData.tipo_transferencia = isTransfer ? transferType : '';
-        ticketData.agente_transferido = '';
-        ticketData.cola_transferida = '';
-        ticketData.historial_transferencias = '';
-        ticketData.cantidad_transferencias = 0;
-        
-        // Si es transferencia, procesar información específica
-        if (isTransfer) {
-            if (transferType === 'AGENTE' && agentIdentity) {
-                try {
-                    // Decodificar el agentIdentity (ej: "hola%40bewise.com.es@blip.ai")
-                    const decodedAgent = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
-                    ticketData.agente_transferido = decodedAgent;
-                } catch {
-                    ticketData.agente_transferido = agentIdentity;
-                }
-                ticketData.cola_transferida = 'DIRECT_TRANSFER';
-            } else if (transferType === 'COLA') {
-                ticketData.cola_transferida = content.team || '';
-            }
-            
-            // Historial básico para transferencias individuales
-            ticketData.historial_transferencias = `${parentSeqId} → ${content.sequentialId}`;
-            ticketData.cantidad_transferencias = 1;
-        } else {
-            // Es un ticket padre, buscar si tiene hijos para completar la información
-            if (ticketsAbiertos) {
-                const ticketKeys = Array.from(ticketsAbiertos.keys()).filter(key => 
-                    key.startsWith(`${contactoIdentity}_`) && key !== `${contactoIdentity}_${content.sequentialId}`
-                );
                 
-                if (ticketKeys.length > 0) {
-                    // Tiene transferencias, completar información
-                    ticketData.transferencia = 'TRUE';
-                    const primerHijo = ticketsAbiertos.get(ticketKeys[0]);
-                    if (primerHijo) {
-                        ticketData.ticket_hijo = primerHijo.sequentialId || '';
-                        ticketData.tipo_transferencia = primerHijo.transferType || '';
-                        ticketData.agente_transferido = primerHijo.agentIdentity || '';
-                        ticketData.cola_transferida = primerHijo.team === 'DIRECT_TRANSFER' ? 'DIRECT_TRANSFER' : primerHijo.team || '';
-                        ticketData.historial_transferencias = `${content.sequentialId} → ${primerHijo.sequentialId}`;
-                        ticketData.cantidad_transferencias = 1;
+                const contenido = primerMensajeAgente.content || '';
+                
+                if (fechaCompleta && !fechaCompleta.includes('T')) {
+                    try {
+                        const fechaObj = new Date(fechaCompleta);
+                        if (!isNaN(fechaObj.getTime())) {
+                            fechaCompleta = fechaObj.toISOString();
+                        }
+                    } catch (e) {
+                        fechaCompleta = new Date().toISOString();
                     }
                 }
+                
+                primerContacto = fechaCompleta ? `${fechaCompleta} - ${contenido}` : contenido;
             }
+            
+            // Crear conversación con formato [agente]: y [cliente]:
+            const conversacion = ticketInfo.mensajes.map(m => {
+                const from = m.from || '';
+                let emisor = 'desconocido';
+                if ((from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || m.metadata?.['#messageEmitter'] === 'Human') {
+                    emisor = 'agente';
+                } else if (from.includes('@wa.gw.msging.net')) {
+                    emisor = 'cliente';
+                }
+                return `[${emisor}]: ${m.content || ''}`;
+            }).join('\\n');
+
+            // --- Preparar datos base del ticket ---
+            const ticketData = {
+                id: ticket.id || '',
+                sequentialId: content.sequentialId || '',
+                parentSequentialId: content.parentSequentialId || '',
+                status: content.status || '',
+                team: content.team || '',
+                unreadMessages: content.unreadMessages || 0,
+                storageDate: metadata['#envelope.storageDate'] || content.storageDate || '',
+                timestamp: metadata['#wa.timestamp'] || metadata['#envelope.storageDate'] || content.storageDate || '',
+                estadoTicket: 'cerrado',
+                fechaCierre: ticketInfo.fechaCierre || '',
+                tipoCierre: ticketInfo.tipoCierre || '',
+                fechaFiltro: obtenerFechaFiltro(ticket),
+                tipoDato: 'ticket_reporte',
+                procesadoEn: new Date().toISOString(),
+                conversacion: conversacion,
+                contacto: contacto,
+                agente: ticketInfo.correoAgente || '',
+                duracion: ticketInfo.duracion || '',
+                TIPO: tipoTicket
+            };
+            
+            // --- AGREGAR CAMPOS DE TRANSFERENCIA ---
+            const isTransfer = tipoTicket === 'TRANSFERENCIA';
+            const parentSeqId = content.parentSequentialId || '';
+            const agentIdentity = ticketInfo.agentIdentity || content.agentIdentity || '';
+            
+            // Campos de transferencia
+            ticketData.transferencia = isTransfer ? 'TRUE' : 'FALSE';
+            ticketData.ticket_padre = isTransfer ? parentSeqId : '';
+            ticketData.ticket_hijo = '';
+            ticketData.tipo_transferencia = isTransfer ? (content.team === 'DIRECT_TRANSFER' ? 'AGENTE' : 'COLA') : '';
+            ticketData.agente_transferido = '';
+            ticketData.cola_transferida = '';
+            ticketData.historial_transferencias = '';
+            ticketData.cantidad_transferencias = 0;
+            
+            // Si es transferencia, procesar información específica
+            if (isTransfer) {
+                if (content.team === 'DIRECT_TRANSFER' && agentIdentity) {
+                    try {
+                        const decodedAgent = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                        ticketData.agente_transferido = decodedAgent;
+                    } catch {
+                        ticketData.agente_transferido = agentIdentity;
+                    }
+                    ticketData.cola_transferida = 'DIRECT_TRANSFER';
+                } else if (content.team && content.team !== 'DIRECT_TRANSFER') {
+                    ticketData.cola_transferida = content.team;
+                }
+                
+                // Historial básico para transferencias individuales
+                ticketData.historial_transferencias = `${parentSeqId} → ${content.sequentialId}`;
+                ticketData.cantidad_transferencias = 1;
+            } else {
+                // Es un ticket padre, buscar si tiene hijos para completar la información
+                const hijos = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
+                if (hijos.length > 0) {
+                    ticketData.transferencia = 'TRUE';
+                    ticketData.ticket_hijo = hijos[0].sequentialId;
+                    
+                    const primerHijo = hijos[0];
+                    const team = primerHijo.team || '';
+                    const agentIdentity = primerHijo.agentIdentity || '';
+                    
+                    if (team === 'DIRECT_TRANSFER' && agentIdentity) {
+                        ticketData.tipo_transferencia = 'AGENTE';
+                        try {
+                            ticketData.agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                        } catch {
+                            ticketData.agente_transferido = agentIdentity;
+                        }
+                        ticketData.cola_transferida = 'DIRECT_TRANSFER';
+                    } else if (team && team !== 'DIRECT_TRANSFER') {
+                        ticketData.tipo_transferencia = 'COLA';
+                        ticketData.cola_transferida = team;
+                    }
+                    
+                    ticketData.historial_transferencias = `${content.sequentialId} → ${primerHijo.sequentialId}`;
+                    ticketData.cantidad_transferencias = 1;
+                }
+            }
+            
+            // --- AGREGAR CAMPOS DE ATENCIÓN ---
+            ticketData.atencion_id = atencionId;
+            ticketData.atencion_fecha_apertura = fechaApertura;
+            ticketData.atencion_fecha_cierre = fechaCierre;
+            ticketData.atencion_duracion_total = duracionTotal;
+            
+            // --- Añadir campos específicos según el tipo base ---
+            if (tipoBase === 'PLANTILLA') {
+                const details = ticketInfo.campaignDetails || {};
+                
+                // Campos específicos de plantilla
+                ticketData.plantilla_id = details.campaignId || '';
+                ticketData.plantilla_nombre = details.templateName || '';
+                ticketData.plantilla_contenido = details.templateContent || '';
+                ticketData.plantilla_parametros = (details.templateParameters || []).map(p => p.text || p).join('|');
+                ticketData.plantilla_campaignId = details.campaignId || '';
+                ticketData.plantilla_campaignName = details.campaignName || '';
+                ticketData.plantilla_fecha_envio = details.sentTime || '';
+                ticketData.contacto_identity = `${contacto}@wa.gw.msging.net`;
+                ticketData.contacto_numero = contacto;
+                ticketData.usuario_respuesta = details.replied ? 'SI' : 'NO';
+                ticketData.usuario_tipo_respuesta = details.replyType || '';
+                ticketData.usuario_contenido = details.replyContent || '';
+                ticketData.usuario_fecha_respuesta = details.replyTime || '';
+                ticketData.ticket_generado = 'SI';
+                ticketData.ticket_id = ticket.id || '';
+                ticketData.ticket_sequentialId = content.sequentialId || '';
+                ticketData.ticket_estado = 'cerrado';
+                ticketData.ticket_fecha_cierre = ticketInfo.fechaCierre || '';
+                ticketData.ticket_tipo_cierre = ticketInfo.tipoCierre || '';
+                ticketData.ticket_agente = ticketInfo.correoAgente || '';
+                ticketData.ticket_duracion = ticketInfo.duracion || '';
+            }
+            
+            ticketsProcesados.push(ticketData);
         }
         
+        // Determinar campos según el tipo base
         let campos;
-
-        // --- Añadir campos específicos y definir columnas ---
-        if (tipoTicket === 'PLANTILLA') {
-            const details = ticketInfo.campaignDetails || {};
-            
-            // Usar el nombre real de la plantilla
-            ticketData.plantilla = details.templateName || '';
-            
-            // *** NUEVAS COLUMNAS ***
-            ticketData.plantilla_contenido = details.templateContent || '';
-            ticketData.plantilla_variables = (details.templateParameters || [])
-                .map(p => p.text || p) // Manejar objetos {text: val} o strings
-                .join('|');
-
-            // Determinar si hubo respuesta: si hay mensajes del cliente O si el tracking lo indica
-            const huboRespuesta = ticketInfo.mensajes.some(m => 
-                m.from && m.from.endsWith('@wa.gw.msging.net')
-            ) || details.replied;
-            ticketData.respuesta_usuario = huboRespuesta ? 'TRUE' : 'FALSE';
-            
-            // Usar el contenido de respuesta del cliente si existe
-            ticketData.contenido_usuario = details.replyContent || '';
-            
-            // Usar el emisor real de la campaña
-            ticketData.emisor = details.originator || '';
-            ticketData.envio_plantilla = details.sentTime || '';
-            ticketData.primer_contacto = primerContacto;
-            ticketData.tipo_contenido = details.replyType || '';
-
+        if (tipoBase === 'PLANTILLA') {
             campos = [
-                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
-                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
-                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion',
-                'plantilla', 'plantilla_contenido', 'plantilla_variables', 'respuesta_usuario', 'contenido_usuario', 'emisor', 'envio_plantilla', 'primer_contacto', 'tipo_contenido', 'TIPO',
-                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+                'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
+                'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
+                'contacto_identity', 'contacto_numero', 'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
+                'ticket_generado', 'ticket_id', 'ticket_sequentialId', 'ticket_estado', 'ticket_fecha_cierre', 'ticket_tipo_cierre', 'ticket_agente', 'ticket_duracion'
             ];
         } else { // BOT
-            // Asegurar que los tickets BOT tengan todos los campos requeridos
             campos = [
-                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages', 'storageDate', 
-                'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre', 'fechaFiltro', 
-                'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
-                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+                'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total'
             ];
         }
 
-        const fechaFormateada = new Date(ticketInfo.fechaCierre || Date.now()).toISOString().slice(0, 10);
-        const nombreArchivo = `ticket_${seqId}_${fechaFormateada}.csv`;
+        const fechaFormateada = new Date(fechaCierre || Date.now()).toISOString().slice(0, 10);
+        const nombreArchivo = `atencion_${contacto}_${fechaFormateada}.csv`;
         
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
@@ -465,40 +473,16 @@ const generarTicketIndividual = (ticketInfo, directorio, ticketsAbiertos = null)
         }
 
         const parser = new Parser({ fields: campos, header: true });
-        const csv = parser.parse([ticketData]);
+        const csv = parser.parse(ticketsProcesados);
 
         const rutaArchivo = path.join(carpetaReportes, nombreArchivo);
         fs.writeFileSync(rutaArchivo, csv);
         
-        console.log(`[generarTicketIndividual] Archivo de reporte generado: ${nombreArchivo} (Tipo: ${tipoTicket})`);
-        console.log(`[generarTicketIndividual] Campos generados:`, campos);
-        console.log(`[generarTicketIndividual] Datos del ticket:`, {
-            id: ticketData.id,
-            sequentialId: ticketData.sequentialId,
-            tipo: ticketData.TIPO,
-            plantilla: ticketData.plantilla || 'N/A',
-            respuesta_usuario: ticketData.respuesta_usuario || 'N/A',
-            emisor: ticketData.emisor || 'N/A'
-        });
-        
-        // Logs adicionales para debugging de plantillas
-        if (tipoTicket === 'PLANTILLA') {
-            const details = ticketInfo.campaignDetails || {};
-            console.log(`[generarTicketIndividual] Detalles de campaña:`, {
-                templateName: details.templateName,
-                originator: details.originator,
-                templateContent: details.templateContent,
-                templateContentWithParams: details.templateContentWithParams,
-                replyContent: details.replyContent,
-                replied: details.replied,
-                mensajesCount: ticketInfo.mensajes.length,
-                tieneRespuestaCliente: ticketInfo.mensajes.some(m => m.from && m.from.endsWith('@wa.gw.msging.net'))
-            });
-        }
+        console.log(`[generarAtencionCompleta] Archivo de atención generado: ${nombreArchivo} (Tipo: ${tipoBase}, Tickets: ${ticketsProcesados.length})`);
         
         return rutaArchivo;
     } catch (error) {
-        console.error('[generarTicketIndividual] Error:', error);
+        console.error('[generarAtencionCompleta] Error:', error);
         throw error;
     }
 };
@@ -647,107 +631,113 @@ function procesarTransferenciasTicketsV4(tickets) {
 }
 
 /**
- * Consolida todos los archivos CSV individuales de tickets en uno solo, agregando info de transferencias
- * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de tickets
+ * Consolida todos los archivos CSV de atenciones en dos archivos separados (BOT y PLANTILLA)
+ * @param {string} directorio - Ruta del directorio que contiene los archivos CSV de atenciones
  * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
- * @returns {Promise<string>} - Ruta del archivo CSV consolidado
+ * @returns {Promise<{botPath: string, plantillaPath: string}>} - Rutas de los archivos CSV consolidados
  */
 const consolidarTicketsCsvs = async (directorio, fechas = null) => {
     try {
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
-            return null;
+            return { botPath: null, plantillaPath: null };
         }
-        const archivos = fs.readdirSync(carpetaReportes)
-            .filter(archivo => archivo.startsWith('ticket_') && archivo.endsWith('.csv'));
-        if (archivos.length === 0) {
-            return null;
-        }
-        console.log(`[consolidarTicketsCsvs] Archivos encontrados: ${archivos.length}`);
         
-        // Leer y parsear todos los tickets
-        let tickets = [];
+        const archivos = fs.readdirSync(carpetaReportes)
+            .filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+            
+        if (archivos.length === 0) {
+            return { botPath: null, plantillaPath: null };
+        }
+        
+        console.log(`[consolidarTicketsCsvs] Archivos de atención encontrados: ${archivos.length}`);
+        
+        // Leer y parsear todos los archivos de atención
+        let todosLosTickets = [];
         for (const archivo of archivos) {
             const rutaArchivo = path.join(carpetaReportes, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
             const registros = parse(contenido, { columns: true, skip_empty_lines: true });
-            tickets.push(...registros);
+            todosLosTickets.push(...registros);
         }
         
-        console.log(`[consolidarTicketsCsvs] Total tickets leídos: ${tickets.length}`);
+        console.log(`[consolidarTicketsCsvs] Total tickets leídos: ${todosLosTickets.length}`);
         
         // Filtrar por fechas si aplica
         if (fechas) {
-            const ticketsAntes = tickets.length;
-            tickets = tickets.filter(t => fechaEnRango(t.fechaCierre, fechas));
-            console.log(`[consolidarTicketsCsvs] Tickets después del filtro de fechas: ${tickets.length} (antes: ${ticketsAntes})`);
+            const ticketsAntes = todosLosTickets.length;
+            todosLosTickets = todosLosTickets.filter(t => fechaEnRango(t.atencion_fecha_cierre, fechas));
+            console.log(`[consolidarTicketsCsvs] Tickets después del filtro de fechas: ${todosLosTickets.length} (antes: ${ticketsAntes})`);
         }
         
-        // Agrupar por contacto para procesar transferencias
-        const grupos = {};
-        for (const t of tickets) {
-            const contacto = t.contacto || t.customerIdentity || t["customerIdentity"] || '';
-            if (!grupos[contacto]) grupos[contacto] = [];
-            grupos[contacto].push(t);
+        // Separar tickets por tipo base
+        const ticketsBot = [];
+        const ticketsPlantilla = [];
+        
+        for (const ticket of todosLosTickets) {
+            // Determinar tipo base por las columnas disponibles
+            if (ticket.plantilla_id || ticket.plantilla_nombre) {
+                ticketsPlantilla.push(ticket);
+            } else {
+                ticketsBot.push(ticket);
+            }
         }
         
-        console.log(`[consolidarTicketsCsvs] Grupos de contacto encontrados: ${Object.keys(grupos).length}`);
+        console.log(`[consolidarTicketsCsvs] Tickets BOT: ${ticketsBot.length}, Tickets PLANTILLA: ${ticketsPlantilla.length}`);
         
-        // Procesar transferencias por grupo con la nueva lógica
-        let ticketsProcesados = [];
-        for (const [contacto, arr] of Object.entries(grupos)) {
-            console.log(`[consolidarTicketsCsvs] Procesando grupo de contacto ${contacto} con ${arr.length} tickets`);
-            const procesados = procesarTransferenciasTicketsV4(arr);
-            ticketsProcesados.push(...procesados);
+        // Generar CSV de tickets BOT
+        let botPath = null;
+        if (ticketsBot.length > 0) {
+            const camposBot = [
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+                'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total'
+            ];
+            
+            const parserBot = new Parser({ fields: camposBot, header: true });
+            const csvBot = parserBot.parse(ticketsBot);
+            
+            const nombreArchivoBot = 'tickets_bot.csv';
+            const rutaBot = path.join(carpetaReportes, nombreArchivoBot);
+            fs.writeFileSync(rutaBot, csvBot);
+            botPath = rutaBot;
+            
+            console.log(`[consolidarTicketsCsvs] Archivo BOT consolidado generado: ${rutaBot}`);
         }
         
-        console.log(`[consolidarTicketsCsvs] Total tickets procesados: ${ticketsProcesados.length}`);
+        // Generar CSV de tickets PLANTILLA
+        let plantillaPath = null;
+        if (ticketsPlantilla.length > 0) {
+            const camposPlantilla = [
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+                'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
+                'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
+                'contacto_identity', 'contacto_numero', 'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
+                'ticket_generado', 'ticket_id', 'ticket_sequentialId', 'ticket_estado', 'ticket_fecha_cierre', 'ticket_tipo_cierre', 'ticket_agente', 'ticket_duracion'
+            ];
+            
+            const parserPlantilla = new Parser({ fields: camposPlantilla, header: true });
+            const csvPlantilla = parserPlantilla.parse(ticketsPlantilla);
+            
+            const nombreArchivoPlantilla = 'tickets_plantilla.csv';
+            const rutaPlantilla = path.join(carpetaReportes, nombreArchivoPlantilla);
+            fs.writeFileSync(rutaPlantilla, csvPlantilla);
+            plantillaPath = rutaPlantilla;
+            
+            console.log(`[consolidarTicketsCsvs] Archivo PLANTILLA consolidado generado: ${rutaPlantilla}`);
+        }
         
-        // Orden de columnas solicitado
-        const camposPrincipales = [
-            'id', 'sequentialId', 'status', 'team', 'unreadMessages',
-            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
-            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO'
-        ];
-        const camposTransferencia = [
-            'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia',
-            'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias'
-        ];
+        console.log(`[consolidarTicketsCsvs] Resumen de consolidación:`);
+        console.log(`  - Tickets BOT: ${ticketsBot.length}`);
+        console.log(`  - Tickets PLANTILLA: ${ticketsPlantilla.length}`);
+        console.log(`  - Total: ${todosLosTickets.length}`);
         
-        // Detectar campos extra (por si hay columnas adicionales de plantillas)
-        const camposExtra = [];
-        ticketsProcesados.forEach(t => {
-            Object.keys(t).forEach(k => {
-                if (!camposPrincipales.includes(k) && !camposTransferencia.includes(k) && !camposExtra.includes(k)) {
-                    camposExtra.push(k);
-                }
-            });
-        });
-        
-        const camposFinal = [...camposPrincipales, ...camposTransferencia, ...camposExtra];
-        console.log(`[consolidarTicketsCsvs] Campos finales: ${camposFinal.length} campos`);
-        
-        // Generar CSV
-        const parser = new Parser({ fields: camposFinal, header: true });
-        const csv = parser.parse(ticketsProcesados);
-        
-        // Guardar archivo con nombre tickets_bot.csv
-        const nombreArchivo = 'tickets_bot.csv';
-        const rutaConsolidada = path.join(carpetaReportes, nombreArchivo);
-        fs.writeFileSync(rutaConsolidada, csv);
-        
-        console.log(`[consolidarTicketsCsvs] Archivo consolidado generado: ${rutaConsolidada}`);
-        console.log(`[consolidarTicketsCsvs] Resumen de transferencias:`);
-        
-        // Log de resumen de transferencias
-        const transferencias = ticketsProcesados.filter(t => t.transferencia === 'TRUE');
-        const ticketsRaiz = ticketsProcesados.filter(t => t.transferencia === 'FALSE');
-        
-        console.log(`  - Tickets raíz: ${ticketsRaiz.length}`);
-        console.log(`  - Transferencias: ${transferencias.length}`);
-        console.log(`  - Total: ${ticketsProcesados.length}`);
-        
-        return rutaConsolidada;
+        return { botPath, plantillaPath };
     } catch (error) {
         console.error('[consolidarTicketsCsvs] Error:', error);
         throw error;
@@ -1563,12 +1553,71 @@ async function generarResumenDeCampanas(campaignData, baseDir, periodo = 'No esp
     return rutaCsv;
 }
 
+/**
+ * Crea un archivo ZIP con los dos archivos CSV de tickets (BOT y PLANTILLA)
+ * @param {string} botPath - Ruta del archivo CSV de tickets BOT
+ * @param {string} plantillaPath - Ruta del archivo CSV de tickets PLANTILLA
+ * @param {string} directorio - Directorio donde guardar el ZIP
+ * @returns {Promise<string>} - Ruta del archivo ZIP generado
+ */
+const crearZipTickets = async (botPath, plantillaPath, directorio) => {
+    try {
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        if (!fs.existsSync(carpetaReportes)) {
+            fs.mkdirSync(carpetaReportes, { recursive: true });
+        }
+        
+        const now = new Date();
+        const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const fecha = now.toISOString().slice(0,10);
+        const nombreZip = `tickets_${hora}_${fecha}.zip`;
+        const rutaZip = path.join(carpetaReportes, nombreZip);
+        
+        // Crear stream de escritura para el ZIP
+        const output = fs.createWriteStream(rutaZip);
+        const archive = archiver('zip', {
+            zlib: { level: 9 } // Máxima compresión
+        });
+        
+        // Manejar eventos del archiver
+        output.on('close', () => {
+            console.log(`[crearZipTickets] ZIP creado: ${rutaZip} (${archive.pointer()} bytes)`);
+        });
+        
+        archive.on('error', (err) => {
+            throw err;
+        });
+        
+        // Pipe archive data to the file
+        archive.pipe(output);
+        
+        // Agregar archivos al ZIP
+        if (botPath && fs.existsSync(botPath)) {
+            archive.file(botPath, { name: 'tickets_bot.csv' });
+            console.log(`[crearZipTickets] Agregado al ZIP: tickets_bot.csv`);
+        }
+        
+        if (plantillaPath && fs.existsSync(plantillaPath)) {
+            archive.file(plantillaPath, { name: 'tickets_plantilla.csv' });
+            console.log(`[crearZipTickets] Agregado al ZIP: tickets_plantilla.csv`);
+        }
+        
+        // Finalizar el archivo
+        await archive.finalize();
+        
+        return rutaZip;
+    } catch (error) {
+        console.error('[crearZipTickets] Error:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
     flattenObject,
     consolidarTicketsCsvs,
-    generarTicketIndividual,
+    generarAtencionCompleta,
     procesarMensajes,
     procesarContactos,
     procesarEventos,
@@ -1577,5 +1626,6 @@ module.exports = {
     consolidarCampanas,
     obtenerCampanasDisponibles,
     generarResumenDeCampanas,
-    procesarTransferenciasTicketsV4
+    procesarTransferenciasTicketsV4,
+    crearZipTickets
 }; 

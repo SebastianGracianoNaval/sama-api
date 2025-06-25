@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { generarNombreArchivo } = require('../utils/blipUtils');
+const { consolidarTicketsCsvs, crearZipTickets } = require('../utils/csvUtils');
 
 const reportController = {
     // Obtener lista de reportes disponibles
@@ -60,6 +61,7 @@ const reportController = {
             const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
             console.log(`[ReportController] Generando reporte de tipo: ${tipo}`);
             console.log(`[ReportController] Filtros - Inicio: ${fechaInicio}, Fin: ${fechaFin}, Plantilla: ${nombrePlantilla}`);
+            
             // Validar fechas
             if ((fechaInicio && !fechaFin) || (!fechaInicio && fechaFin)) {
                 return res.status(400).json({
@@ -82,7 +84,43 @@ const reportController = {
                     });
                 }
             }
-            // Obtener ruta de la carpeta según tipo
+            
+            // Lógica especial para tickets
+            if (tipo === 'tickets') {
+                console.log('[ReportController] Procesando consolidación de tickets');
+                
+                const carpeta = path.join(__dirname, '..', 'data', 'tickets');
+                if (!fs.existsSync(carpeta)) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'No se encontró el directorio de tickets.'
+                    });
+                }
+                
+                const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
+                
+                // Consolidar tickets en dos archivos separados
+                const { botPath, plantillaPath } = await consolidarTicketsCsvs(carpeta, fechas);
+                
+                if (!botPath && !plantillaPath) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'No hay datos de tickets para exportar.'
+                    });
+                }
+                
+                // Crear ZIP con los dos archivos
+                const zipPath = await crearZipTickets(botPath, plantillaPath, carpeta);
+                
+                // Establecer el header Content-Disposition
+                const nombreArchivo = `tickets_${new Date().toISOString().slice(0, 10)}.zip`;
+                res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+                res.download(zipPath);
+                
+                return;
+            }
+            
+            // Lógica original para otros tipos
             const carpeta = path.join(__dirname, '..', 'data', tipo === 'tickets' ? 'tickets' : 'plantillas');
             if (!fs.existsSync(carpeta)) {
                 return res.status(404).json({
@@ -90,6 +128,7 @@ const reportController = {
                     message: 'No se encontró el directorio de datos.'
                 });
             }
+            
             // Leer y procesar archivos
             const archivos = fs.readdirSync(carpeta)
                 .filter(archivo => archivo.endsWith('.csv'));
@@ -99,23 +138,29 @@ const reportController = {
                     message: 'No hay datos para exportar.'
                 });
             }
+            
             let datosCombinados = [];
             let encabezados = null;
             let incluidas = 0;
             let descartadas = 0;
+            
             for (const archivo of archivos) {
                 const rutaArchivo = path.join(carpeta, archivo);
                 const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
                 const lineas = contenido.split('\n');
+                
                 if (!encabezados) {
                     encabezados = lineas[0];
                     datosCombinados.push(encabezados);
                 }
+                
                 const columnas = encabezados.split(',').map(col => col.trim());
                 const fechaIndex = columnas.findIndex(col => col === 'fechaFiltro');
+                
                 for (let i = 1; i < lineas.length; i++) {
                     const linea = lineas[i].trim();
                     if (!linea) continue;
+                    
                     if (fechaInicio && fechaFin && fechaIndex !== -1) {
                         const valores = linea.match(/(?:"[^"]*"|[^,])+/g).map(v => v.trim().replace(/^"|"$/g, ''));
                         const fecha = valores[fechaIndex];
@@ -131,12 +176,14 @@ const reportController = {
                     }
                 }
             }
+            
             if (datosCombinados.length <= 1) {
                 return res.status(404).json({
                     success: false,
                     message: 'No hay datos para exportar.'
                 });
             }
+            
             // Generar nombre de archivo con el formato correcto
             const nombreArchivo = generarNombreArchivo(tipo);
 
@@ -151,6 +198,7 @@ const reportController = {
             // Establecer el header Content-Disposition
             res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
             res.download(rutaConsolidada);
+            
         } catch (error) {
             console.error('[ReportController] Error al generar reporte:', error);
             res.status(500).json({

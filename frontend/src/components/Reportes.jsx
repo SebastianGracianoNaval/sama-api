@@ -89,6 +89,8 @@ const Reportes = () => {
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Aquí podés descargar los contenidos de los webhooks que se envían, podés filtrar la información seleccionando un rango de fechas.
+        <br />
+        <strong>Nota:</strong> Los tickets se exportan en un archivo ZIP que contiene dos archivos CSV separados: uno para tickets BOT y otro para tickets PLANTILLA, incluyendo todas las transferencias asociadas.
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField

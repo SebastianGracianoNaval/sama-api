@@ -20,10 +20,10 @@ const fs = require('fs');
 // Valor: { templateName, originator, sentTime, replied, replyContent, replyTime, templateContent, campaignId, templateParameters }
 const campaignTracking = new Map();
 
-// Mapa para mantener tickets abiertos por contacto
+// Mapa para mantener atenciones abiertas por contacto
 // Clave: contactIdentity
-// Valor: { ticket, mensajes, eventos, cerrado, fechaApertura, tipo, campaignDetails }
-const ticketsAbiertos = new Map();
+// Valor: { contacto, tipoBase, fechaApertura, tickets: [], cerrada }
+const atencionesAbiertas = new Map();
 
 /**
  * Función para extraer la identidad del contacto de un objeto de webhook
@@ -229,15 +229,27 @@ const handleWebhook = async (req, res) => {
 
                     const finalCampaignDetails = campaignTracking.get(contactoIdentity);
                     
-                    // NUEVA LÓGICA: Manejar transferencias como tickets individuales
-                    // Si es un ticket con parentSequentialId, es una transferencia
+                    // NUEVA LÓGICA: Manejar tickets como parte de una atención
                     if (parentSequentialId) {
-                        // Es un ticket hijo (transferencia)
+                        // Es un ticket de transferencia
                         console.log(`[Ticket] TRANSFERENCIA detectada - Hijo: ${sequentialId}, Padre: ${parentSequentialId}`);
                         
-                        // Crear un nuevo ticket para la transferencia
-                        const ticketKey = `${contactoIdentity}_${sequentialId}`;
-                        ticketsAbiertos.set(ticketKey, {
+                        // Buscar la atención existente para este contacto
+                        let atencion = atencionesAbiertas.get(contactoIdentity);
+                        if (!atencion) {
+                            console.log(`[Ticket] No se encontró atención para ${contactoIdentity}, creando nueva`);
+                            atencion = {
+                                contacto: contactoIdentity.split('@')[0],
+                                tipoBase: ticketType, // Usar el tipo del ticket de transferencia
+                                fechaApertura: fechaApertura,
+                                tickets: [],
+                                cerrada: false
+                            };
+                            atencionesAbiertas.set(contactoIdentity, atencion);
+                        }
+                        
+                        // Agregar el ticket de transferencia a la atención
+                        atencion.tickets.push({
                             ticket: item,
                             mensajes: [],
                             eventos: [],
@@ -245,33 +257,39 @@ const handleWebhook = async (req, res) => {
                             fechaCierre: null,
                             fechaApertura: fechaApertura,
                             contacto: contactoIdentity.split('@')[0],
-                            tipo: ticketType,
+                            tipo: 'TRANSFERENCIA', // Tipo específico para transferencias
                             campaignDetails: finalCampaignDetails || null,
                             sequentialId: sequentialId,
                             parentSequentialId: parentSequentialId,
-                            isTransfer: true,
-                            transferType: content.team === 'DIRECT_TRANSFER' ? 'AGENTE' : 'COLA',
-                            agentIdentity: content.agentIdentity || '',
-                            team: content.team || ''
+                            team: content.team || '',
+                            agentIdentity: content.agentIdentity || ''
                         });
                         
-                        console.log(`[Ticket] Ticket de transferencia creado: ${ticketKey} - Tipo: ${ticketType}, Transfer: ${content.team}`);
+                        console.log(`[Ticket] Ticket de transferencia agregado a atención: ${contactoIdentity} - Tipo: ${ticketType}, Transfer: ${content.team}`);
                         
                     } else {
-                        // Es un ticket raíz (sin transferencia o primer ticket)
+                        // Es un ticket raíz (inicio de atención)
                         console.log(`[Ticket] TICKET RAÍZ detectado - SequentialId: ${sequentialId}`);
                         
-                        // Si ya existe un ticket abierto para este contacto, cerrarlo primero
-                        const existingTicket = ticketsAbiertos.get(contactoIdentity);
-                        if (existingTicket && !existingTicket.cerrado) {
-                            console.log(`[Ticket] Cerrando ticket anterior para ${contactoIdentity}`);
-                            existingTicket.cerrado = true;
-                            existingTicket.fechaCierre = fechaApertura;
-                            existingTicket.tipoCierre = 'Transferencia';
+                        // Si ya existe una atención para este contacto, cerrarla primero
+                        const existingAtencion = atencionesAbiertas.get(contactoIdentity);
+                        if (existingAtencion && !existingAtencion.cerrada) {
+                            console.log(`[Ticket] Cerrando atención anterior para ${contactoIdentity}`);
+                            existingAtencion.cerrada = true;
+                            existingAtencion.fechaCierre = fechaApertura;
                         }
                         
-                        // Crear nuevo ticket raíz
-                        ticketsAbiertos.set(contactoIdentity, {
+                        // Crear nueva atención
+                        const nuevaAtencion = {
+                            contacto: contactoIdentity.split('@')[0],
+                            tipoBase: ticketType, // BOT o PLANTILLA
+                            fechaApertura: fechaApertura,
+                            tickets: [],
+                            cerrada: false
+                        };
+                        
+                        // Agregar el ticket raíz a la atención
+                        nuevaAtencion.tickets.push({
                             ticket: item,
                             mensajes: [],
                             eventos: [],
@@ -279,17 +297,16 @@ const handleWebhook = async (req, res) => {
                             fechaCierre: null,
                             fechaApertura: fechaApertura,
                             contacto: contactoIdentity.split('@')[0],
-                            tipo: ticketType,
+                            tipo: ticketType, // BOT o PLANTILLA
                             campaignDetails: finalCampaignDetails || null,
                             sequentialId: sequentialId,
                             parentSequentialId: null,
-                            isTransfer: false,
-                            transferType: '',
-                            agentIdentity: '',
-                            team: content.team || ''
+                            team: content.team || '',
+                            agentIdentity: ''
                         });
                         
-                        console.log(`[Ticket] Ticket raíz creado para ${contactoIdentity} (seqId: ${sequentialId}) - Tipo: ${ticketType}`);
+                        atencionesAbiertas.set(contactoIdentity, nuevaAtencion);
+                        console.log(`[Ticket] Nueva atención creada para ${contactoIdentity} (seqId: ${sequentialId}) - Tipo: ${ticketType}`);
                     }
                     
                     // Una vez que el ticket se abre, podemos limpiar el tracking para este contacto
@@ -298,18 +315,15 @@ const handleWebhook = async (req, res) => {
                     }
                 }
 
-                // Si ya existe un ticket para este contacto, procesar mensajes
-                // Buscar tanto el ticket principal como los de transferencia
-                const ticketKeys = Array.from(ticketsAbiertos.keys()).filter(key => 
-                    key === contactoIdentity || key.startsWith(`${contactoIdentity}_`)
-                );
-                
-                for (const ticketKey of ticketKeys) {
-                    const ticketInfo = ticketsAbiertos.get(ticketKey);
-                    if (ticketInfo && !ticketInfo.cerrado) {
+                // Si ya existe una atención para este contacto, procesar mensajes
+                const atencion = atencionesAbiertas.get(contactoIdentity);
+                if (atencion && !atencion.cerrada) {
+                    // Buscar el ticket más reciente (último en el array) para agregar mensajes
+                    const ticketActual = atencion.tickets[atencion.tickets.length - 1];
+                    if (ticketActual && !ticketActual.cerrado) {
                         // Agregar mensajes
                         if (tipo === 'mensaje') {
-                            ticketInfo.mensajes.push(item);
+                            ticketActual.mensajes.push(item);
                         }
                     }
                 }
@@ -603,20 +617,20 @@ const handleBotEvent = async (req, res) => {
         
         console.log('[BotEvent] Evento procesado:', eventoBot);
         
-        // Si es finalización de ticket, buscar el ticket abierto correspondiente
+        // Si es finalización de ticket, buscar la atención correspondiente
         if (eventoBot.ticketFinalizo) {
-            // Buscar todos los tickets abiertos para este contacto (incluyendo transferencias)
-            const ticketKeys = Array.from(ticketsAbiertos.keys()).filter(key => 
-                key === contactoIdentity || key.startsWith(`${contactoIdentity}_`)
-            );
+            // Buscar la atención abierta para este contacto
+            const atencion = atencionesAbiertas.get(contactoIdentity);
             
-            console.log(`[BotEvent] Buscando tickets para cerrar en contacto ${contactoIdentity}. Keys encontrados:`, ticketKeys);
+            console.log(`[BotEvent] Buscando atención para cerrar en contacto ${contactoIdentity}`);
             
-            // Primero, cerrar todos los tickets abiertos
-            for (const ticketKey of ticketKeys) {
-                const ticketInfo = ticketsAbiertos.get(ticketKey);
-                if (ticketInfo && !ticketInfo.cerrado) {
-                    // Marcar ticket como cerrado
+            if (atencion && !atencion.cerrada) {
+                // Marcar toda la atención como cerrada
+                atencion.cerrada = true;
+                atencion.fechaCierre = eventoBot.timestamp;
+                
+                // Cerrar todos los tickets de la atención
+                atencion.tickets.forEach(ticketInfo => {
                     ticketInfo.cerrado = true;
                     ticketInfo.fechaCierre = eventoBot.timestamp;
                     ticketInfo.correoAgente = correoAgente;
@@ -626,33 +640,34 @@ const handleBotEvent = async (req, res) => {
                     const duracion = calcularDuracionTicket(ticketInfo.fechaApertura, ticketInfo.fechaCierre);
                     ticketInfo.duracion = duracion;
                     
-                    console.log(`[BotEvent] Ticket cerrado: ${ticketKey} por agente ${correoAgente}. Duración: ${duracion}`);
-                }
-            }
-            
-            // Luego, generar archivos individuales para todos los tickets cerrados
-            for (const ticketKey of ticketKeys) {
-                const ticketInfo = ticketsAbiertos.get(ticketKey);
-                if (ticketInfo && ticketInfo.cerrado) {
-                    try {
-                        const carpeta = obtenerRutaCarpeta('ticket');
-                        const rutaCarpeta = path.join(__dirname, '..', carpeta);
-                        
-                        // Agregar información del agente y tipoCierre al ticket
+                    console.log(`[BotEvent] Ticket cerrado: ${ticketInfo.sequentialId} por agente ${correoAgente}. Duración: ${duracion}`);
+                });
+                
+                // Calcular duración total de la atención
+                const duracionTotal = calcularDuracionTicket(atencion.fechaApertura, atencion.fechaCierre);
+                atencion.duracionTotal = duracionTotal;
+                
+                console.log(`[BotEvent] Atención cerrada: ${contactoIdentity} - Duración total: ${duracionTotal}`);
+                
+                // Generar archivo de atención completa
+                try {
+                    const carpeta = obtenerRutaCarpeta('ticket');
+                    const rutaCarpeta = path.join(__dirname, '..', carpeta);
+                    
+                    // Agregar información del agente y tipoCierre a todos los tickets
+                    atencion.tickets.forEach(ticketInfo => {
                         ticketInfo.agente = correoAgente;
                         ticketInfo.fechaCierre = eventoBot.timestamp;
                         ticketInfo.tipoCierre = tipoCierre || '';
-                        
-                        generarTicketIndividual(ticketInfo, rutaCarpeta, ticketsAbiertos);
-                        console.log(`[BotEvent] Archivo individual generado para ticket: ${ticketKey}`);
-                    } catch (error) {
-                        console.error(`[BotEvent] Error al generar archivo individual para ticket ${ticketKey}:`, error);
-                    }
+                    });
+                    
+                    generarAtencionCompleta(atencion, rutaCarpeta);
+                    console.log(`[BotEvent] Archivo de atención completa generado para: ${contactoIdentity}`);
+                } catch (error) {
+                    console.error(`[BotEvent] Error al generar archivo de atención para ${contactoIdentity}:`, error);
                 }
-            }
-            
-            if (ticketKeys.length === 0) {
-                console.log(`[BotEvent] No se encontraron tickets abiertos para contacto ${contactoIdentity}`);
+            } else {
+                console.log(`[BotEvent] No se encontró atención abierta para contacto ${contactoIdentity}`);
             }
         }
         
@@ -877,5 +892,5 @@ module.exports = {
     consolidarTickets,
     handleBotEvent,
     handleCampaignEvent,
-    ticketsAbiertos
+    atencionesAbiertas
 }; 
