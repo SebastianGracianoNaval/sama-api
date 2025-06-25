@@ -236,9 +236,10 @@ const consolidarCsvs = async (directorio, tipo, fechas = null) => {
  * Genera un archivo CSV individual para un ticket cerrado con estructura limpia
  * @param {Object} ticketInfo - Información del ticket cerrado
  * @param {string} directorio - Directorio base donde guardar el archivo
+ * @param {Map} ticketsAbiertos - Mapa de tickets abiertos para buscar relaciones (opcional)
  * @returns {string} - Ruta del archivo generado
  */
-const generarTicketIndividual = (ticketInfo, directorio) => {
+const generarTicketIndividual = (ticketInfo, directorio, ticketsAbiertos = null) => {
     try {
         const ticket = ticketInfo.ticket;
         const content = ticket.content || {};
@@ -385,6 +386,27 @@ const generarTicketIndividual = (ticketInfo, directorio) => {
             // Historial básico para transferencias individuales
             ticketData.historial_transferencias = `${parentSeqId} → ${content.sequentialId}`;
             ticketData.cantidad_transferencias = 1;
+        } else {
+            // Es un ticket padre, buscar si tiene hijos para completar la información
+            if (ticketsAbiertos) {
+                const ticketKeys = Array.from(ticketsAbiertos.keys()).filter(key => 
+                    key.startsWith(`${contactoIdentity}_`) && key !== `${contactoIdentity}_${content.sequentialId}`
+                );
+                
+                if (ticketKeys.length > 0) {
+                    // Tiene transferencias, completar información
+                    ticketData.transferencia = 'TRUE';
+                    const primerHijo = ticketsAbiertos.get(ticketKeys[0]);
+                    if (primerHijo) {
+                        ticketData.ticket_hijo = primerHijo.sequentialId || '';
+                        ticketData.tipo_transferencia = primerHijo.transferType || '';
+                        ticketData.agente_transferido = primerHijo.agentIdentity || '';
+                        ticketData.cola_transferida = primerHijo.team === 'DIRECT_TRANSFER' ? 'DIRECT_TRANSFER' : primerHijo.team || '';
+                        ticketData.historial_transferencias = `${content.sequentialId} → ${primerHijo.sequentialId}`;
+                        ticketData.cantidad_transferencias = 1;
+                    }
+                }
+            }
         }
         
         let campos;

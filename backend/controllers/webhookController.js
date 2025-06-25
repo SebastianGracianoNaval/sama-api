@@ -612,6 +612,7 @@ const handleBotEvent = async (req, res) => {
             
             console.log(`[BotEvent] Buscando tickets para cerrar en contacto ${contactoIdentity}. Keys encontrados:`, ticketKeys);
             
+            // Primero, cerrar todos los tickets abiertos
             for (const ticketKey of ticketKeys) {
                 const ticketInfo = ticketsAbiertos.get(ticketKey);
                 if (ticketInfo && !ticketInfo.cerrado) {
@@ -626,8 +627,13 @@ const handleBotEvent = async (req, res) => {
                     ticketInfo.duracion = duracion;
                     
                     console.log(`[BotEvent] Ticket cerrado: ${ticketKey} por agente ${correoAgente}. Duración: ${duracion}`);
-                    
-                    // Generar archivo individual del ticket con información del agente y tipoCierre
+                }
+            }
+            
+            // Luego, generar archivos individuales para todos los tickets cerrados
+            for (const ticketKey of ticketKeys) {
+                const ticketInfo = ticketsAbiertos.get(ticketKey);
+                if (ticketInfo && ticketInfo.cerrado) {
                     try {
                         const carpeta = obtenerRutaCarpeta('ticket');
                         const rutaCarpeta = path.join(__dirname, '..', carpeta);
@@ -637,7 +643,7 @@ const handleBotEvent = async (req, res) => {
                         ticketInfo.fechaCierre = eventoBot.timestamp;
                         ticketInfo.tipoCierre = tipoCierre || '';
                         
-                        generarTicketIndividual(ticketInfo, rutaCarpeta);
+                        generarTicketIndividual(ticketInfo, rutaCarpeta, ticketsAbiertos);
                         console.log(`[BotEvent] Archivo individual generado para ticket: ${ticketKey}`);
                     } catch (error) {
                         console.error(`[BotEvent] Error al generar archivo individual para ticket ${ticketKey}:`, error);
