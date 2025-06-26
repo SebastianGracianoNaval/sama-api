@@ -349,6 +349,7 @@ const generarAtencionCompleta = (atencion, directorio) => {
             const agentIdentity = ticketInfo.agentIdentity || content.agentIdentity || '';
             // Buscar todos los hijos (tickets transferencia) de este ticket
             const hijos = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
+            // Determinar si es el último ticket de la atención (el que no tiene hijos y es el último cerrado)
             const esUltimoTicket = hijos.length === 0;
             // Campos de transferencia
             ticketData.transferencia = 'FALSE'; // Por defecto FALSE
@@ -359,8 +360,8 @@ const generarAtencionCompleta = (atencion, directorio) => {
             ticketData.agente_transferido = '';
             ticketData.cola_transferida = '';
             ticketData.cantidad_transferencias = 0;
-            // Si es transferencia, procesar información específica
-            if (isTransfer) {
+            // Si es transferencia y NO es el último ticket, transferencia TRUE
+            if (isTransfer && !esUltimoTicket) {
                 if (content.team === 'DIRECT_TRANSFER' && agentIdentity) {
                     try {
                         const decodedAgent = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
@@ -374,7 +375,7 @@ const generarAtencionCompleta = (atencion, directorio) => {
                 }
                 ticketData.cantidad_transferencias = 1;
                 ticketData.transferencia = 'TRUE';
-            } else if (hijos.length > 0) {
+            } else if (!isTransfer && hijos.length > 0) {
                 // Es un ticket padre que tiene transferencias
                 ticketData.transferencia = 'TRUE';
                 // tipo_transferencia y otros campos según el primer hijo
@@ -394,6 +395,11 @@ const generarAtencionCompleta = (atencion, directorio) => {
                     ticketData.cola_transferida = team;
                 }
                 ticketData.cantidad_transferencias = hijos.length;
+            }
+            // Si es el último ticket de la atención, transferencia debe ser FALSE y cantidad_transferencias 0
+            if (esUltimoTicket) {
+                ticketData.transferencia = 'FALSE';
+                ticketData.cantidad_transferencias = 0;
             }
             
             // --- AGREGAR CAMPOS DE ATENCIÓN ---
