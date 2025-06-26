@@ -347,21 +347,18 @@ const generarAtencionCompleta = (atencion, directorio) => {
             const isTransfer = tipoTicket === 'TRANSFERENCIA';
             const parentSeqId = content.parentSequentialId || '';
             const agentIdentity = ticketInfo.agentIdentity || content.agentIdentity || '';
-            
-            // Determinar si es el último ticket de la atención (el que no tiene hijos)
+            // Buscar todos los hijos (tickets transferencia) de este ticket
             const hijos = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
             const esUltimoTicket = hijos.length === 0;
-            
             // Campos de transferencia
             ticketData.transferencia = 'FALSE'; // Por defecto FALSE
             ticketData.ticket_padre = isTransfer ? parentSeqId : '';
-            ticketData.ticket_hijo = '';
+            // ticket_hijo: para el padre, todos los sequentialId de los hijos separados por coma; para los hijos, vacío
+            ticketData.ticket_hijo = (!isTransfer && hijos.length > 0) ? hijos.map(h => h.sequentialId).join(',') : '';
             ticketData.tipo_transferencia = '';
             ticketData.agente_transferido = '';
             ticketData.cola_transferida = '';
-            ticketData.historial_transferencias = '';
             ticketData.cantidad_transferencias = 0;
-            
             // Si es transferencia, procesar información específica
             if (isTransfer) {
                 if (content.team === 'DIRECT_TRANSFER' && agentIdentity) {
@@ -375,37 +372,28 @@ const generarAtencionCompleta = (atencion, directorio) => {
                 } else if (content.team && content.team !== 'DIRECT_TRANSFER') {
                     ticketData.cola_transferida = content.team;
                 }
-                
-                // Historial básico para transferencias individuales
-                ticketData.historial_transferencias = `${parentSeqId} → ${content.sequentialId}`;
                 ticketData.cantidad_transferencias = 1;
-            } else {
-                // Es un ticket padre, verificar si tiene hijos
-                if (hijos.length > 0) {
-                    // Marcar como transferencia TRUE solo si NO es el último ticket
-                    ticketData.transferencia = 'TRUE';
-                    ticketData.ticket_hijo = hijos[0].sequentialId;
-                    
-                    const primerHijo = hijos[0];
-                    const team = primerHijo.team || '';
-                    const agentIdentity = primerHijo.agentIdentity || '';
-                    
-                    if (team === 'DIRECT_TRANSFER' && agentIdentity) {
-                        ticketData.tipo_transferencia = 'AGENTE';
-                        try {
-                            ticketData.agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
-                        } catch {
-                            ticketData.agente_transferido = agentIdentity;
-                        }
-                        ticketData.cola_transferida = 'DIRECT_TRANSFER';
-                    } else if (team && team !== 'DIRECT_TRANSFER') {
-                        ticketData.tipo_transferencia = 'COLA';
-                        ticketData.cola_transferida = team;
+                ticketData.transferencia = 'TRUE';
+            } else if (hijos.length > 0) {
+                // Es un ticket padre que tiene transferencias
+                ticketData.transferencia = 'TRUE';
+                // tipo_transferencia y otros campos según el primer hijo
+                const primerHijo = hijos[0];
+                const team = primerHijo.team || '';
+                const agentIdentity = primerHijo.agentIdentity || '';
+                if (team === 'DIRECT_TRANSFER' && agentIdentity) {
+                    ticketData.tipo_transferencia = 'AGENTE';
+                    try {
+                        ticketData.agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                    } catch {
+                        ticketData.agente_transferido = agentIdentity;
                     }
-                    
-                    ticketData.historial_transferencias = `${content.sequentialId} → ${primerHijo.sequentialId}`;
-                    ticketData.cantidad_transferencias = 1;
+                    ticketData.cola_transferida = 'DIRECT_TRANSFER';
+                } else if (team && team !== 'DIRECT_TRANSFER') {
+                    ticketData.tipo_transferencia = 'COLA';
+                    ticketData.cola_transferida = team;
                 }
+                ticketData.cantidad_transferencias = hijos.length;
             }
             
             // --- AGREGAR CAMPOS DE ATENCIÓN ---
@@ -452,7 +440,7 @@ const generarAtencionCompleta = (atencion, directorio) => {
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
                 'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
-                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
                 'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
                 'contacto_identity', 'contacto_numero', 'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
@@ -463,7 +451,7 @@ const generarAtencionCompleta = (atencion, directorio) => {
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
                 'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
-                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total'
             ];
         }
@@ -713,18 +701,15 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
                 'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
-                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total'
             ];
-            
             const parserBot = new Parser({ fields: camposBot, header: true });
             const csvBot = parserBot.parse(ticketsBot);
-            
             const nombreArchivoBot = 'tickets_bot.csv';
             const rutaBot = path.join(carpetaReportes, nombreArchivoBot);
             fs.writeFileSync(rutaBot, csvBot);
             botPath = rutaBot;
-            
             console.log(`[consolidarTicketsCsvs] Archivo BOT consolidado generado: ${rutaBot}`);
         }
         
@@ -735,21 +720,18 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
                 'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
-                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'historial_transferencias', 'cantidad_transferencias',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
                 'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
                 'contacto_identity', 'contacto_numero', 'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
                 'ticket_generado', 'ticket_id', 'ticket_sequentialId', 'ticket_estado', 'ticket_fecha_cierre', 'ticket_tipo_cierre', 'ticket_agente', 'ticket_duracion'
             ];
-            
             const parserPlantilla = new Parser({ fields: camposPlantilla, header: true });
             const csvPlantilla = parserPlantilla.parse(ticketsPlantilla);
-            
             const nombreArchivoPlantilla = 'tickets_plantilla.csv';
             const rutaPlantilla = path.join(carpetaReportes, nombreArchivoPlantilla);
             fs.writeFileSync(rutaPlantilla, csvPlantilla);
             plantillaPath = rutaPlantilla;
-            
             console.log(`[consolidarTicketsCsvs] Archivo PLANTILLA consolidado generado: ${rutaPlantilla}`);
         }
         
