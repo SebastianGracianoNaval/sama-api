@@ -652,27 +652,22 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         
         const archivos = fs.readdirSync(carpetaReportes);
         console.log(`[consolidarTicketsCsvs] Todos los archivos en reportes:`, archivos);
-        
+        // Filtrar todos los archivos de atención
         const archivosAtencion = archivos.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
         console.log(`[consolidarTicketsCsvs] Archivos de atención filtrados:`, archivosAtencion);
-            
         if (archivosAtencion.length === 0) {
             console.log(`[consolidarTicketsCsvs] No hay archivos de atención para procesar`);
             return { botPath: null, plantillaPath: null };
         }
-        
         console.log(`[consolidarTicketsCsvs] Archivos de atención encontrados: ${archivosAtencion.length}`);
-        
         // Leer y parsear todos los archivos de atención
         let todosLosTickets = [];
         for (const archivo of archivosAtencion) {
             const rutaArchivo = path.join(carpetaReportes, archivo);
             console.log(`[consolidarTicketsCsvs] Procesando archivo: ${rutaArchivo}`);
-            
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
             const registros = parse(contenido, { columns: true, skip_empty_lines: true });
             console.log(`[consolidarTicketsCsvs] Registros leídos de ${archivo}: ${registros.length}`);
-            
             todosLosTickets.push(...registros);
         }
         
