@@ -339,6 +339,7 @@ const generarAtencionCompleta = (atencion, directorio) => {
                 tipoDato: 'ticket_reporte',
                 procesadoEn: new Date().toISOString(),
                 conversacion: conversacion,
+                primer_contacto: primerContacto,
                 contacto: contacto,
                 agente: ticketInfo.correoAgente || '',
                 duracion: ticketInfo.duracion || '',
@@ -460,7 +461,7 @@ const generarAtencionCompleta = (atencion, directorio) => {
             campos = [
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
-                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
                 'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
                 'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
@@ -471,7 +472,7 @@ const generarAtencionCompleta = (atencion, directorio) => {
             campos = [
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
-                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
                 'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total'
             ];
@@ -718,7 +719,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             const camposBot = [
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
-                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
                 'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total'
             ];
@@ -737,7 +738,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             const camposPlantilla = [
                 'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
                 'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
-                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'contacto', 'agente', 'duracion', 'TIPO',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
                 'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
                 'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
                 'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
