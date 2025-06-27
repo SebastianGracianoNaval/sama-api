@@ -813,17 +813,18 @@ const consolidarCampanas = async (directorio, fechas = null, nombrePlantilla = n
         return { filePath: null, data: [] };
     }
 
-    // 2. OBTENER TODOS LOS TICKETS DE ATENCIONES (tickets_plantilla)
+    // 2. OBTENER TODOS LOS TICKETS DE ATENCIONES (atencion_*.csv)
     const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
     let ticketsPlantilla = [];
     if (fs.existsSync(carpetaReportes)) {
-        const archivosTickets = fs.readdirSync(carpetaReportes)
-            .filter(archivo => archivo === 'tickets_plantilla.csv');
-        for (const archivo of archivosTickets) {
+        const archivosAtencion = fs.readdirSync(carpetaReportes)
+            .filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+        for (const archivo of archivosAtencion) {
             const rutaArchivo = path.join(carpetaReportes, archivo);
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
             const registros = parse(contenido, { columns: true, skip_empty_lines: true });
-            ticketsPlantilla.push(...registros);
+            // Solo tickets de tipo PLANTILLA
+            ticketsPlantilla.push(...registros.filter(t => t.TIPO === 'PLANTILLA' || t.TIPO === 'TRANSFERENCIA'));
         }
     }
 
