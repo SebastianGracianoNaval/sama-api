@@ -349,57 +349,70 @@ const generarAtencionCompleta = (atencion, directorio) => {
             const isTransfer = tipoTicket === 'TRANSFERENCIA';
             const parentSeqId = content.parentSequentialId || '';
             const agentIdentity = ticketInfo.agentIdentity || content.agentIdentity || '';
-            // Buscar todos los hijos (tickets transferencia) de este ticket
-            const hijos = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
-            // Determinar si es el último ticket de la atención (el que no tiene hijos y es el último cerrado)
-            const esUltimoTicket = hijos.length === 0;
+            
+            // NUEVA LÓGICA: Determinar si es el último ticket de la atención
+            // Ordenar tickets por fecha de apertura para determinar el orden cronológico
+            const ticketsOrdenados = [...atencion.tickets].sort((a, b) => {
+                const fechaA = new Date(a.fechaApertura || 0);
+                const fechaB = new Date(b.fechaApertura || 0);
+                return fechaA - fechaB;
+            });
+            
+            // El último ticket es el que se abrió más recientemente
+            const ultimoTicket = ticketsOrdenados[ticketsOrdenados.length - 1];
+            const esUltimoTicket = content.sequentialId === ultimoTicket.sequentialId;
+            
             // Campos de transferencia
             ticketData.transferencia = 'FALSE'; // Por defecto FALSE
             ticketData.ticket_padre = isTransfer ? parentSeqId : '';
             // ticket_hijo: para el padre, todos los sequentialId de los hijos separados por coma; para los hijos, vacío
+            const hijos = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
             ticketData.ticket_hijo = (!isTransfer && hijos.length > 0) ? hijos.map(h => h.sequentialId).join(',') : '';
             ticketData.tipo_transferencia = '';
             ticketData.agente_transferido = '';
             ticketData.cola_transferida = '';
             ticketData.cantidad_transferencias = 0;
-            // Si es transferencia y NO es el último ticket, transferencia TRUE
-            if (isTransfer && !esUltimoTicket) {
-                if (content.team === 'DIRECT_TRANSFER' && agentIdentity) {
-                    try {
-                        const decodedAgent = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
-                        ticketData.agente_transferido = decodedAgent;
-                    } catch {
-                        ticketData.agente_transferido = agentIdentity;
-                    }
-                    ticketData.cola_transferida = 'DIRECT_TRANSFER';
-                } else if (content.team && content.team !== 'DIRECT_TRANSFER') {
-                    ticketData.cola_transferida = content.team;
-                }
-                ticketData.cantidad_transferencias = 1;
+            
+            // NUEVA LÓGICA: Si NO es el último ticket, entonces es una transferencia
+            if (!esUltimoTicket) {
                 ticketData.transferencia = 'TRUE';
-            } else if (!isTransfer && hijos.length > 0) {
-                // Es un ticket padre que tiene transferencias
-                ticketData.transferencia = 'TRUE';
-                // tipo_transferencia y otros campos según el primer hijo
-                const primerHijo = hijos[0];
-                const team = primerHijo.team || '';
-                const agentIdentity = primerHijo.agentIdentity || '';
-                if (team === 'DIRECT_TRANSFER' && agentIdentity) {
-                    ticketData.tipo_transferencia = 'AGENTE';
-                    try {
-                        ticketData.agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
-                    } catch {
-                        ticketData.agente_transferido = agentIdentity;
+                
+                // Si es una transferencia (tiene parentSequentialId), obtener información del agente transferido
+                if (isTransfer) {
+                    if (content.team === 'DIRECT_TRANSFER' && agentIdentity) {
+                        try {
+                            const decodedAgent = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                            ticketData.agente_transferido = decodedAgent;
+                        } catch {
+                            ticketData.agente_transferido = agentIdentity;
+                        }
+                        ticketData.cola_transferida = 'DIRECT_TRANSFER';
+                    } else if (content.team && content.team !== 'DIRECT_TRANSFER') {
+                        ticketData.cola_transferida = content.team;
                     }
-                    ticketData.cola_transferida = 'DIRECT_TRANSFER';
-                } else if (team && team !== 'DIRECT_TRANSFER') {
-                    ticketData.tipo_transferencia = 'COLA';
-                    ticketData.cola_transferida = team;
+                    ticketData.cantidad_transferencias = 1;
+                } else {
+                    // Es un ticket padre que tiene transferencias
+                    // tipo_transferencia y otros campos según el primer hijo
+                    const primerHijo = hijos[0];
+                    const team = primerHijo.team || '';
+                    const agentIdentity = primerHijo.agentIdentity || '';
+                    if (team === 'DIRECT_TRANSFER' && agentIdentity) {
+                        ticketData.tipo_transferencia = 'AGENTE';
+                        try {
+                            ticketData.agente_transferido = decodeURIComponent(agentIdentity.split('@')[0].replace(/%40/g, '@')) + '@' + agentIdentity.split('@').slice(1).join('@');
+                        } catch {
+                            ticketData.agente_transferido = agentIdentity;
+                        }
+                        ticketData.cola_transferida = 'DIRECT_TRANSFER';
+                    } else if (team && team !== 'DIRECT_TRANSFER') {
+                        ticketData.tipo_transferencia = 'COLA';
+                        ticketData.cola_transferida = team;
+                    }
+                    ticketData.cantidad_transferencias = hijos.length;
                 }
-                ticketData.cantidad_transferencias = hijos.length;
-            }
-            // Si es el último ticket de la atención, transferencia debe ser FALSE y cantidad_transferencias 0
-            if (esUltimoTicket) {
+            } else {
+                // Es el último ticket, transferencia FALSE
                 ticketData.transferencia = 'FALSE';
                 ticketData.cantidad_transferencias = 0;
             }
