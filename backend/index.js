@@ -10,7 +10,7 @@ const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos, ticketsAbiertos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson, generarNombreArchivo } = require('./utils/blipUtils');
-const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles, generarResumenDeCampanas } = require('./utils/csvUtils');
+const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles, generarResumenDeCampanas, exportarCampanasDetallado } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
 const { parse } = require('csv-parse/sync');
 const { Parser } = require('json2csv');
@@ -514,33 +514,26 @@ app.get('/descargar/campanas', async (req, res) => {
     const { fechaInicio, fechaFin, nombrePlantilla } = req.query;
     try {
         console.log(`[DESCARGAR/CAMPANAS] Fechas recibidas - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}', nombrePlantilla: '${nombrePlantilla}'`);
-        
         const fechas = (fechaInicio && fechaFin) ? validarFechas(fechaInicio, fechaFin) : null;
         if ((fechaInicio && fechaFin) && !fechas) {
             return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
         }
-        
         const carpeta = obtenerRutaCarpeta('ticket');
         const pathCarpeta = path.join(__dirname, carpeta);
-        
         if (!fs.existsSync(pathCarpeta)) {
             fs.mkdirSync(pathCarpeta, { recursive: true });
             return res.status(404).json({ success: false, message: 'No hay datos de tickets disponibles.' });
         }
-
-        // La función ahora devuelve un objeto { filePath, data }
-        const resultado = await consolidarCampanas(pathCarpeta, fechas, nombrePlantilla);
-        
+        // Usar la nueva función para exportar el CSV detallado
+        const resultado = await exportarCampanasDetallado(pathCarpeta, fechas, nombrePlantilla);
         if (!resultado || !resultado.filePath) {
             return res.status(404).json({ success: false, message: 'No hay datos de campañas para los filtros seleccionados.' });
         }
-
         // Descargar el archivo consolidado usando la ruta del resultado
         const nombreArchivo = path.basename(resultado.filePath);
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
         res.download(resultado.filePath);
-
     } catch (error) {
         console.error(`[DESCARGAR/CAMPANAS] Error:`, error);
         res.status(500).json({

@@ -1603,6 +1603,45 @@ const crearZipTickets = async (botPath, plantillaPath, directorio) => {
     }
 };
 
+/**
+ * Exporta el CSV de campañas detallado a partir de tickets_plantilla.csv, aplicando filtros de fecha y nombre de plantilla.
+ * @param {string} directorio - Directorio base (usualmente 'data/tickets')
+ * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
+ * @param {string} nombrePlantilla - Nombre de la plantilla para filtrar (opcional)
+ * @returns {Promise<{filePath: string, data: Array}>} - Objeto con la ruta del archivo CSV y los datos filtrados
+ */
+const exportarCampanasDetallado = async (directorio, fechas = null, nombrePlantilla = null) => {
+    const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+    const rutaTicketsPlantilla = path.join(carpetaReportes, 'tickets_plantilla.csv');
+    if (!fs.existsSync(rutaTicketsPlantilla)) {
+        return { filePath: null, data: [] };
+    }
+    const contenido = fs.readFileSync(rutaTicketsPlantilla, 'utf-8');
+    const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+    let filtrados = registros;
+    // Filtro por fechas (atencion_fecha_cierre)
+    if (fechas && fechas.fechaInicio && fechas.fechaFin) {
+        filtrados = filtrados.filter(t => fechaEnRango(t.atencion_fecha_cierre, fechas));
+    }
+    // Filtro por nombre de plantilla
+    if (nombrePlantilla) {
+        filtrados = filtrados.filter(t => t.plantilla_nombre === nombrePlantilla);
+    }
+    if (filtrados.length === 0) {
+        return { filePath: null, data: [] };
+    }
+    // Generar nombre de archivo
+    const now = new Date();
+    const nombreArchivo = `campanas_detallado_${now.toISOString().replace(/:/g, '_')}.csv`;
+    const rutaCsv = path.join(carpetaReportes, nombreArchivo);
+    // Usar los mismos campos que tickets_plantilla.csv
+    const campos = Object.keys(filtrados[0]);
+    const parser = new Parser({ fields: campos, header: true });
+    const csv = parser.parse(filtrados);
+    fs.writeFileSync(rutaCsv, csv);
+    return { filePath: rutaCsv, data: filtrados };
+};
+
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
@@ -1618,5 +1657,6 @@ module.exports = {
     obtenerCampanasDisponibles,
     generarResumenDeCampanas,
     procesarTransferenciasTicketsV4,
-    crearZipTickets
+    crearZipTickets,
+    exportarCampanasDetallado
 }; 
