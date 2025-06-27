@@ -247,8 +247,10 @@ const generarAtencionCompleta = (atencion, directorio) => {
         const fechaCierre = atencion.fechaCierre;
         const duracionTotal = atencion.duracionTotal;
         
-        // Generar ID único de atención
-        const atencionId = `atencion_${contacto}_${new Date(fechaApertura).toISOString().slice(0, 10)}`;
+        // Generar ID único de atención con timestamp para evitar sobrescrituras
+        const timestamp = new Date().getTime();
+        const fechaAperturaFormateada = new Date(fechaApertura).toISOString().slice(0, 10);
+        const atencionId = `atencion_${contacto}_${fechaAperturaFormateada}_${timestamp}`;
         
         console.log(`[generarAtencionCompleta] Generando atención: ${atencionId} - Tipo: ${tipoBase} - Tickets: ${atencion.tickets.length}`);
         
@@ -462,8 +464,10 @@ const generarAtencionCompleta = (atencion, directorio) => {
             ];
         }
 
-        const fechaFormateada = new Date(fechaCierre || Date.now()).toISOString().slice(0, 10);
-        const nombreArchivo = `atencion_${contacto}_${fechaFormateada}.csv`;
+        // Generar nombre único de archivo con timestamp para evitar sobrescrituras
+        const fechaCierreFormateada = new Date(fechaCierre || Date.now()).toISOString().slice(0, 10);
+        const hora = new Date().toTimeString().slice(0,8).replace(/:/g, '-');
+        const nombreArchivo = `atencion_${contacto}_${fechaCierreFormateada}_${hora}_${timestamp}.csv`;
         
         const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
         if (!fs.existsSync(carpetaReportes)) {
