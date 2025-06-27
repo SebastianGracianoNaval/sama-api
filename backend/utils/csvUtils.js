@@ -1642,6 +1642,125 @@ const exportarCampanasDetallado = async (directorio, fechas = null, nombrePlanti
     return { filePath: rutaCsv, data: filtrados };
 };
 
+/**
+ * Consolida los datos de campañas de forma independiente, leyendo directamente los archivos de atención
+ * @param {string} directorio - Directorio base (usualmente 'data/tickets')
+ * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
+ * @param {string} nombrePlantilla - Nombre de la plantilla para filtrar (opcional)
+ * @returns {Promise<{filePath: string, data: Array}>} - Objeto con la ruta del archivo CSV y los datos consolidados
+ */
+const consolidarCampanasIndependiente = async (directorio, fechas = null, nombrePlantilla = null) => {
+    console.log(`[consolidarCampanasIndependiente] Iniciando consolidación independiente de campanas`);
+    console.log(`[consolidarCampanasIndependiente] Directorio: ${directorio}`);
+    console.log(`[consolidarCampanasIndependiente] Fechas recibidas:`, fechas);
+    console.log(`[consolidarCampanasIndependiente] Nombre de plantilla filtro:`, nombrePlantilla);
+    
+    try {
+        // 1. OBTENER TODOS LOS ARCHIVOS DE ATENCIÓN
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        console.log(`[consolidarCampanasIndependiente] Carpeta reportes: ${carpetaReportes}`);
+        
+        if (!fs.existsSync(carpetaReportes)) {
+            console.log(`[consolidarCampanasIndependiente] Carpeta reportes no existe`);
+            return { filePath: null, data: [] };
+        }
+        
+        const archivos = fs.readdirSync(carpetaReportes);
+        console.log(`[consolidarCampanasIndependiente] Todos los archivos en reportes:`, archivos);
+        
+        // Filtrar solo archivos de atención
+        const archivosAtencion = archivos.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+        console.log(`[consolidarCampanasIndependiente] Archivos de atención encontrados:`, archivosAtencion);
+        
+        if (archivosAtencion.length === 0) {
+            console.log(`[consolidarCampanasIndependiente] No hay archivos de atención para procesar`);
+            return { filePath: null, data: [] };
+        }
+        
+        // 2. LEER Y PROCESAR TODOS LOS TICKETS DE ATENCIONES
+        let todosLosTickets = [];
+        for (const archivo of archivosAtencion) {
+            const rutaArchivo = path.join(carpetaReportes, archivo);
+            console.log(`[consolidarCampanasIndependiente] Procesando archivo: ${rutaArchivo}`);
+            
+            try {
+                const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+                const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+                console.log(`[consolidarCampanasIndependiente] Registros leídos de ${archivo}: ${registros.length}`);
+                
+                // Solo incluir tickets de tipo PLANTILLA y TRANSFERENCIA
+                const ticketsPlantilla = registros.filter(t => 
+                    t.TIPO === 'PLANTILLA' || t.TIPO === 'TRANSFERENCIA'
+                );
+                console.log(`[consolidarCampanasIndependiente] Tickets PLANTILLA/TRANSFERENCIA en ${archivo}: ${ticketsPlantilla.length}`);
+                
+                todosLosTickets.push(...ticketsPlantilla);
+            } catch (error) {
+                console.error(`[consolidarCampanasIndependiente] Error procesando archivo ${archivo}:`, error);
+            }
+        }
+        
+        console.log(`[consolidarCampanasIndependiente] Total tickets PLANTILLA/TRANSFERENCIA leídos: ${todosLosTickets.length}`);
+        
+        if (todosLosTickets.length === 0) {
+            console.log(`[consolidarCampanasIndependiente] No hay tickets de plantilla para procesar`);
+            return { filePath: null, data: [] };
+        }
+        
+        // 3. APLICAR FILTROS
+        let ticketsFiltrados = todosLosTickets;
+        
+        // Filtro por fechas (atencion_fecha_cierre)
+        if (fechas && fechas.fechaInicio && fechas.fechaFin) {
+            const ticketsAntes = ticketsFiltrados.length;
+            ticketsFiltrados = ticketsFiltrados.filter(t => fechaEnRango(t.atencion_fecha_cierre, fechas));
+            console.log(`[consolidarCampanasIndependiente] Tickets después del filtro de fechas: ${ticketsFiltrados.length} (antes: ${ticketsAntes})`);
+        }
+        
+        // Filtro por nombre de plantilla
+        if (nombrePlantilla) {
+            const ticketsAntes = ticketsFiltrados.length;
+            ticketsFiltrados = ticketsFiltrados.filter(t => t.plantilla_nombre === nombrePlantilla);
+            console.log(`[consolidarCampanasIndependiente] Tickets después del filtro de plantilla: ${ticketsFiltrados.length} (antes: ${ticketsAntes})`);
+        }
+        
+        if (ticketsFiltrados.length === 0) {
+            console.log(`[consolidarCampanasIndependiente] No hay tickets después de aplicar filtros`);
+            return { filePath: null, data: [] };
+        }
+        
+        // 4. GENERAR CSV CON EL MISMO FORMATO QUE tickets_plantilla.csv
+        const campos = [
+            'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
+            'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
+            'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
+            'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
+            'contacto_identity', 'contacto_numero', 'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
+            'ticket_generado', 'ticket_id', 'ticket_sequentialId', 'ticket_estado', 'ticket_fecha_cierre', 'ticket_tipo_cierre', 'ticket_agente', 'ticket_duracion'
+        ];
+        
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(ticketsFiltrados);
+        
+        // 5. GENERAR NOMBRE DE ARCHIVO Y GUARDAR
+        const now = new Date();
+        const nombreArchivo = `campanas_detallado_${now.toISOString().replace(/:/g, '_')}.csv`;
+        const rutaCsv = path.join(carpetaReportes, nombreArchivo);
+        
+        fs.writeFileSync(rutaCsv, csv);
+        console.log(`[consolidarCampanasIndependiente] Archivo CSV generado: ${rutaCsv}`);
+        console.log(`[consolidarCampanasIndependiente] Total registros exportados: ${ticketsFiltrados.length}`);
+        
+        return { filePath: rutaCsv, data: ticketsFiltrados };
+        
+    } catch (error) {
+        console.error(`[consolidarCampanasIndependiente] Error:`, error);
+        throw error;
+    }
+};
+
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
@@ -1658,5 +1777,6 @@ module.exports = {
     generarResumenDeCampanas,
     procesarTransferenciasTicketsV4,
     crearZipTickets,
-    exportarCampanasDetallado
+    exportarCampanasDetallado,
+    consolidarCampanasIndependiente
 }; 

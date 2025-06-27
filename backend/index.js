@@ -10,7 +10,7 @@ const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos, ticketsAbiertos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson, generarNombreArchivo } = require('./utils/blipUtils');
-const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles, generarResumenDeCampanas, exportarCampanasDetallado } = require('./utils/csvUtils');
+const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles, generarResumenDeCampanas, exportarCampanasDetallado, consolidarCampanasIndependiente, ...restCsvUtils } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
 const { parse } = require('csv-parse/sync');
 const { Parser } = require('json2csv');
@@ -516,29 +516,43 @@ app.get('/descargar/campanas', async (req, res) => {
         console.log(`[DESCARGAR/CAMPANAS] Fechas recibidas - fechaInicio: '${fechaInicio}', fechaFin: '${fechaFin}', nombrePlantilla: '${nombrePlantilla}'`);
         const fechas = (fechaInicio && fechaFin) ? validarFechas(fechaInicio, fechaFin) : null;
         if ((fechaInicio && fechaFin) && !fechas) {
-            return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas inválidas. Por favor, seleccione fechas válidas.'
+            });
         }
-        const carpeta = obtenerRutaCarpeta('ticket');
-        const pathCarpeta = path.join(__dirname, carpeta);
-        if (!fs.existsSync(pathCarpeta)) {
-            fs.mkdirSync(pathCarpeta, { recursive: true });
-            return res.status(404).json({ success: false, message: 'No hay datos de tickets disponibles.' });
+        
+        console.log(`[DESCARGAR/CAMPANAS] Iniciando exportación independiente de campañas`);
+        const carpeta = path.join(__dirname, 'data', 'tickets');
+        
+        // Usar la nueva función independiente
+        const { filePath, data } = await consolidarCampanasIndependiente(carpeta, fechas, nombrePlantilla);
+        
+        if (!filePath || !data || data.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No hay datos de campañas para exportar con los filtros especificados.'
+            });
         }
-        // Usar la nueva función para exportar el CSV detallado
-        const resultado = await exportarCampanasDetallado(pathCarpeta, fechas, nombrePlantilla);
-        if (!resultado || !resultado.filePath) {
-            return res.status(404).json({ success: false, message: 'No hay datos de campañas para los filtros seleccionados.' });
-        }
-        // Descargar el archivo consolidado usando la ruta del resultado
-        const nombreArchivo = path.basename(resultado.filePath);
+        
+        console.log(`[DESCARGAR/CAMPANAS] Archivo generado: ${filePath}`);
+        console.log(`[DESCARGAR/CAMPANAS] Total registros: ${data.length}`);
+        
+        // Obtener el nombre del archivo para la descarga
+        const nombreArchivo = path.basename(filePath);
+        
+        // Establecer headers para la descarga
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
-        res.download(resultado.filePath);
+        
+        // Enviar el archivo
+        res.download(filePath);
+        
     } catch (error) {
-        console.error(`[DESCARGAR/CAMPANAS] Error:`, error);
+        console.error('[DESCARGAR/CAMPANAS] Error:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al descargar las campanas',
+            message: 'Error al generar el reporte de campañas',
             error: error.message
         });
     }
