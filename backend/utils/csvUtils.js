@@ -271,31 +271,32 @@ const generarAtencionCompleta = (atencion, directorio) => {
                 return fa - fb;
             });
             
-            // --- Extraer Primer Contacto del Agente ---
-            const primerMensajeAgente = ticketInfo.mensajes.find(m => {
-                const from = m.from || '';
-                const messageEmitter = m.metadata?.['#messageEmitter'];
-                return (from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || messageEmitter === 'Human';
+            // --- Mejorar rango de mensajes para este ticket ---
+            // Determinar fecha de apertura y fecha de corte (cierre o apertura del hijo)
+            const fechaAperturaTicket = new Date(ticketInfo.fechaApertura);
+            let fechaCorte = new Date(ticketInfo.fechaCierre || fechaCierre || Date.now());
+            // Si hay un hijo, la fecha de corte es la apertura del primer hijo
+            const hijosTicket = atencion.tickets.filter(t => t.parentSequentialId === content.sequentialId);
+            if (hijosTicket.length > 0) {
+                const fechasHijos = hijosTicket.map(h => new Date(h.fechaApertura));
+                const fechaPrimerHijo = new Date(Math.min(...fechasHijos.map(f => f.getTime())));
+                if (fechaPrimerHijo > fechaAperturaTicket) {
+                    fechaCorte = fechaPrimerHijo;
+                }
+            }
+
+            // Filtrar mensajes dentro del rango de vida del ticket
+            const mensajesTicket = ticketInfo.mensajes.filter(m => {
+                const fechaMsg = new Date(m['metadata.#envelope.storageDate'] || m['storageDate'] || m['timestamp'] || 0);
+                return fechaMsg >= fechaAperturaTicket && fechaMsg < fechaCorte;
             });
 
+            // --- Buscar primer mensaje del agente humano ---
+            const primerMensajeAgente = mensajesTicket.find(m => m.metadata?.['#messageEmitter'] === 'Human');
             let primerContacto = '';
             if (primerMensajeAgente) {
-                let fechaCompleta = '';
-                
-                if (primerMensajeAgente['metadata.#envelope.storageDate']) {
-                    fechaCompleta = primerMensajeAgente['metadata.#envelope.storageDate'];
-                } else if (primerMensajeAgente['metadata.#wa.timestamp']) {
-                    fechaCompleta = primerMensajeAgente['metadata.#wa.timestamp'];
-                } else if (primerMensajeAgente['storageDate']) {
-                    fechaCompleta = primerMensajeAgente['storageDate'];
-                } else if (primerMensajeAgente['timestamp']) {
-                    fechaCompleta = primerMensajeAgente['timestamp'];
-                } else {
-                    fechaCompleta = new Date().toISOString();
-                }
-                
+                let fechaCompleta = primerMensajeAgente['metadata.#envelope.storageDate'] || primerMensajeAgente['metadata.#wa.timestamp'] || primerMensajeAgente['storageDate'] || primerMensajeAgente['timestamp'] || new Date().toISOString();
                 const contenido = primerMensajeAgente.content || '';
-                
                 if (fechaCompleta && !fechaCompleta.includes('T')) {
                     try {
                         const fechaObj = new Date(fechaCompleta);
@@ -306,16 +307,17 @@ const generarAtencionCompleta = (atencion, directorio) => {
                         fechaCompleta = new Date().toISOString();
                     }
                 }
-                
                 primerContacto = fechaCompleta ? `${fechaCompleta} - ${contenido}` : contenido;
             }
-            
-            // Crear conversación con formato [agente]: y [cliente]:
-            const conversacion = ticketInfo.mensajes.map(m => {
+
+            // --- Construir conversación mejorada ---
+            const conversacion = mensajesTicket.map(m => {
                 const from = m.from || '';
                 let emisor = 'desconocido';
-                if ((from.includes('@msging.net') && !from.includes('@wa.gw.msging.net')) || m.metadata?.['#messageEmitter'] === 'Human') {
+                if (m.metadata?.['#messageEmitter'] === 'Human') {
                     emisor = 'agente';
+                } else if (from.includes('@msging.net')) {
+                    emisor = 'bot';
                 } else if (from.includes('@wa.gw.msging.net')) {
                     emisor = 'cliente';
                 }
