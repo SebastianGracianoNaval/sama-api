@@ -1761,6 +1761,158 @@ const consolidarCampanasIndependiente = async (directorio, fechas = null, nombre
     }
 };
 
+/**
+ * Exporta únicamente tickets de campañas (plantillas), excluyendo completamente tickets BOT
+ * @param {string} directorio - Directorio base (usualmente 'data/tickets')
+ * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar
+ * @param {string} nombrePlantilla - Nombre de la plantilla para filtrar (opcional)
+ * @returns {Promise<{filePath: string, data: Array}>} - Objeto con la ruta del archivo CSV y los datos consolidados
+ */
+const exportarSoloCampanas = async (directorio, fechas = null, nombrePlantilla = null) => {
+    console.log(`[exportarSoloCampanas] Iniciando exportación exclusiva de campañas`);
+    console.log(`[exportarSoloCampanas] Directorio: ${directorio}`);
+    console.log(`[exportarSoloCampanas] Fechas recibidas:`, fechas);
+    console.log(`[exportarSoloCampanas] Nombre de plantilla filtro:`, nombrePlantilla);
+    
+    try {
+        // 1. OBTENER TODOS LOS ARCHIVOS DE ATENCIÓN
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        console.log(`[exportarSoloCampanas] Carpeta reportes: ${carpetaReportes}`);
+        
+        if (!fs.existsSync(carpetaReportes)) {
+            console.log(`[exportarSoloCampanas] Carpeta reportes no existe`);
+            return { filePath: null, data: [] };
+        }
+        
+        const archivos = fs.readdirSync(carpetaReportes);
+        console.log(`[exportarSoloCampanas] Todos los archivos en reportes:`, archivos);
+        
+        // Filtrar solo archivos de atención
+        const archivosAtencion = archivos.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+        console.log(`[exportarSoloCampanas] Archivos de atención encontrados:`, archivosAtencion);
+        
+        if (archivosAtencion.length === 0) {
+            console.log(`[exportarSoloCampanas] No hay archivos de atención para procesar`);
+            return { filePath: null, data: [] };
+        }
+        
+        // 2. LEER Y PROCESAR SOLO ATENCIONES DE TIPO PLANTILLA
+        let ticketsCampanas = [];
+        
+        for (const archivo of archivosAtencion) {
+            const rutaArchivo = path.join(carpetaReportes, archivo);
+            console.log(`[exportarSoloCampanas] Procesando archivo: ${rutaArchivo}`);
+            
+            try {
+                const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+                const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+                console.log(`[exportarSoloCampanas] Registros leídos de ${archivo}: ${registros.length}`);
+                
+                if (registros.length === 0) continue;
+                
+                // Verificar si esta atención es de tipo PLANTILLA
+                const primerTicket = registros[0];
+                const atencionTipoBase = primerTicket.atencion_tipo_base || primerTicket.TIPO || 'BOT';
+                
+                console.log(`[exportarSoloCampanas] Atención ${archivo} - Tipo base: ${atencionTipoBase}`);
+                
+                // SOLO procesar si la atención es de tipo PLANTILLA
+                if (atencionTipoBase === 'PLANTILLA') {
+                    console.log(`[exportarSoloCampanas] ✅ Procesando atención PLANTILLA: ${archivo}`);
+                    
+                    // Incluir todos los tickets de esta atención (PLANTILLA y TRANSFERENCIA)
+                    const ticketsAtencion = registros.filter(t => 
+                        t.TIPO === 'PLANTILLA' || t.TIPO === 'TRANSFERENCIA'
+                    );
+                    
+                    console.log(`[exportarSoloCampanas] Tickets PLANTILLA/TRANSFERENCIA en ${archivo}: ${ticketsAtencion.length}`);
+                    ticketsCampanas.push(...ticketsAtencion);
+                } else {
+                    console.log(`[exportarSoloCampanas] ❌ Excluyendo atención BOT: ${archivo}`);
+                }
+                
+            } catch (error) {
+                console.error(`[exportarSoloCampanas] Error procesando archivo ${archivo}:`, error);
+            }
+        }
+        
+        console.log(`[exportarSoloCampanas] Total tickets de campañas encontrados: ${ticketsCampanas.length}`);
+        
+        if (ticketsCampanas.length === 0) {
+            console.log(`[exportarSoloCampanas] No hay tickets de campañas para procesar`);
+            return { filePath: null, data: [] };
+        }
+        
+        // 3. APLICAR FILTROS
+        let ticketsFiltrados = ticketsCampanas;
+        
+        // Filtro por fechas (atencion_fecha_cierre)
+        if (fechas && fechas.fechaInicio && fechas.fechaFin) {
+            const ticketsAntes = ticketsFiltrados.length;
+            ticketsFiltrados = ticketsFiltrados.filter(t => fechaEnRango(t.atencion_fecha_cierre, fechas));
+            console.log(`[exportarSoloCampanas] Tickets después del filtro de fechas: ${ticketsFiltrados.length} (antes: ${ticketsAntes})`);
+        }
+        
+        // Filtro por nombre de plantilla
+        if (nombrePlantilla) {
+            const ticketsAntes = ticketsFiltrados.length;
+            ticketsFiltrados = ticketsFiltrados.filter(t => t.plantilla_nombre === nombrePlantilla);
+            console.log(`[exportarSoloCampanas] Tickets después del filtro de plantilla: ${ticketsFiltrados.length} (antes: ${ticketsAntes})`);
+        }
+        
+        if (ticketsFiltrados.length === 0) {
+            console.log(`[exportarSoloCampanas] No hay tickets después de aplicar filtros`);
+            return { filePath: null, data: [] };
+        }
+        
+        // 4. VERIFICAR QUE NO HAY TICKETS BOT
+        const ticketsBot = ticketsFiltrados.filter(t => t.TIPO === 'BOT');
+        if (ticketsBot.length > 0) {
+            console.error(`[exportarSoloCampanas] ERROR: Se encontraron ${ticketsBot.length} tickets BOT en el resultado`);
+            console.error(`[exportarSoloCampanas] Esto no debería pasar. Revisar lógica de filtrado.`);
+        } else {
+            console.log(`[exportarSoloCampanas] ✅ Verificación exitosa: No hay tickets BOT en el resultado`);
+        }
+        
+        // 5. GENERAR CSV CON EL MISMO FORMATO QUE tickets_plantilla.csv
+        const campos = [
+            'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+            'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+            'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
+            'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
+            'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
+            'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
+            'contacto_identity', 'contacto_numero', 'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
+            'ticket_generado', 'ticket_id', 'ticket_sequentialId', 'ticket_estado', 'ticket_fecha_cierre', 'ticket_tipo_cierre', 'ticket_agente', 'ticket_duracion'
+        ];
+        
+        const parser = new Parser({ fields: campos, header: true });
+        const csv = parser.parse(ticketsFiltrados);
+        
+        // 6. GENERAR NOMBRE DE ARCHIVO Y GUARDAR
+        const now = new Date();
+        const nombreArchivo = `campanas_exclusivas_${now.toISOString().replace(/:/g, '_')}.csv`;
+        const rutaCsv = path.join(carpetaReportes, nombreArchivo);
+        
+        fs.writeFileSync(rutaCsv, csv);
+        console.log(`[exportarSoloCampanas] Archivo CSV generado: ${rutaCsv}`);
+        console.log(`[exportarSoloCampanas] Total registros exportados: ${ticketsFiltrados.length}`);
+        
+        // 7. RESUMEN FINAL
+        const tiposEnResultado = {};
+        ticketsFiltrados.forEach(t => {
+            tiposEnResultado[t.TIPO] = (tiposEnResultado[t.TIPO] || 0) + 1;
+        });
+        console.log(`[exportarSoloCampanas] Resumen final - Tipos exportados:`, tiposEnResultado);
+        
+        return { filePath: rutaCsv, data: ticketsFiltrados };
+        
+    } catch (error) {
+        console.error(`[exportarSoloCampanas] Error:`, error);
+        throw error;
+    }
+};
+
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
@@ -1778,5 +1930,6 @@ module.exports = {
     procesarTransferenciasTicketsV4,
     crearZipTickets,
     exportarCampanasDetallado,
-    consolidarCampanasIndependiente
+    consolidarCampanasIndependiente,
+    exportarSoloCampanas
 }; 

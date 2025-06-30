@@ -10,7 +10,7 @@ const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 const { handleWebhook, consolidarArchivos, ticketsAbiertos } = require('./controllers/webhookController');
 const { obtenerRutaCarpeta, identificarTipoJson, generarNombreArchivo } = require('./utils/blipUtils');
-const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles, generarResumenDeCampanas, exportarCampanasDetallado, consolidarCampanasIndependiente, ...restCsvUtils } = require('./utils/csvUtils');
+const { consolidarCsvs, consolidarTicketsCsvs, consolidarCampanas, obtenerCampanasDisponibles, generarResumenDeCampanas, exportarCampanasDetallado, consolidarCampanasIndependiente, exportarSoloCampanas, ...restCsvUtils } = require('./utils/csvUtils');
 const reportController = require('./controllers/reportController');
 const { parse } = require('csv-parse/sync');
 const { Parser } = require('json2csv');
@@ -522,11 +522,11 @@ app.get('/descargar/campanas', async (req, res) => {
             });
         }
         
-        console.log(`[DESCARGAR/CAMPANAS] Iniciando exportación independiente de campañas`);
+        console.log(`[DESCARGAR/CAMPANAS] Iniciando exportación exclusiva de campañas`);
         const carpeta = path.join(__dirname, 'data', 'tickets');
         
-        // Usar la nueva función independiente
-        const { filePath, data } = await consolidarCampanasIndependiente(carpeta, fechas, nombrePlantilla);
+        // Usar la nueva función exclusiva para campañas
+        const { filePath, data } = await exportarSoloCampanas(carpeta, fechas, nombrePlantilla);
         
         if (!filePath || !data || data.length === 0) {
             return res.status(404).json({
