@@ -1913,6 +1913,144 @@ const exportarSoloCampanas = async (directorio, fechas = null, nombrePlantilla =
     }
 };
 
+/**
+ * Consolida los tickets BOT y PLANTILLA filtrando por correo de agente, fechas y nombre de plantilla
+ * @param {string} directorio - Directorio base (usualmente 'data/tickets')
+ * @param {string} correoAgente - Correo del agente a filtrar (obligatorio)
+ * @param {Object} fechas - Objeto con fechas de inicio y fin para filtrar (opcional)
+ * @param {string} nombrePlantilla - Nombre de la plantilla para filtrar (opcional)
+ * @returns {Promise<{botPath: string|null, plantillaPath: string|null}>}
+ */
+const consolidarTicketsPorAgenteCsvs = async (directorio, correoAgente, fechas = null, nombrePlantilla = null) => {
+    try {
+        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+        if (!fs.existsSync(carpetaReportes)) {
+            fs.mkdirSync(carpetaReportes, { recursive: true });
+            return { botPath: null, plantillaPath: null };
+        }
+        const archivos = fs.readdirSync(carpetaReportes);
+        const archivosAtencion = archivos.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+        if (archivosAtencion.length === 0) {
+            return { botPath: null, plantillaPath: null };
+        }
+        let todosLosTickets = [];
+        for (const archivo of archivosAtencion) {
+            const rutaArchivo = path.join(carpetaReportes, archivo);
+            const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+            todosLosTickets.push(...registros);
+        }
+        // Filtrar por correo de agente (en 'agente' o 'ticket_agente')
+        todosLosTickets = todosLosTickets.filter(t =>
+            (t.agente === correoAgente || t.ticket_agente === correoAgente)
+        );
+        // Filtrar por fechas si aplica
+        if (fechas) {
+            todosLosTickets = todosLosTickets.filter(t => fechaEnRango(t.atencion_fecha_cierre, fechas));
+        }
+        // Filtrar por nombre de plantilla si aplica
+        if (nombrePlantilla) {
+            todosLosTickets = todosLosTickets.filter(t => t.plantilla_nombre === nombrePlantilla);
+        }
+        // Separar tickets por tipo base
+        const ticketsBot = [];
+        const ticketsPlantilla = [];
+        for (const ticket of todosLosTickets) {
+            if (ticket.plantilla_id || ticket.plantilla_nombre) {
+                ticketsPlantilla.push(ticket);
+            } else {
+                ticketsBot.push(ticket);
+            }
+        }
+        // Generar CSV de tickets BOT
+        let botPath = null;
+        if (ticketsBot.length > 0) {
+            const camposBot = [
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+                'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
+                'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total'
+            ];
+            const parserBot = new Parser({ fields: camposBot, header: true });
+            const csvBot = parserBot.parse(ticketsBot);
+            const nombreArchivoBot = `tickets_bot_${correoAgente.replace(/[@.]/g, '_')}.csv`;
+            const rutaBot = path.join(carpetaReportes, nombreArchivoBot);
+            fs.writeFileSync(rutaBot, csvBot);
+            botPath = rutaBot;
+        }
+        // Generar CSV de tickets PLANTILLA
+        let plantillaPath = null;
+        if (ticketsPlantilla.length > 0) {
+            const camposPlantilla = [
+                'id', 'sequentialId', 'parentSequentialId', 'status', 'team', 'unreadMessages',
+                'storageDate', 'timestamp', 'estadoTicket', 'fechaCierre', 'tipoCierre',
+                'fechaFiltro', 'tipoDato', 'procesadoEn', 'conversacion', 'primer_contacto', 'contacto', 'agente', 'duracion', 'TIPO',
+                'transferencia', 'ticket_padre', 'ticket_hijo', 'tipo_transferencia', 'agente_transferido', 'cola_transferida', 'cantidad_transferencias',
+                'atencion_id', 'atencion_fecha_apertura', 'atencion_fecha_cierre', 'atencion_duracion_total',
+                'plantilla_id', 'plantilla_nombre', 'plantilla_contenido', 'plantilla_parametros', 'plantilla_campaignId', 'plantilla_campaignName', 'plantilla_fecha_envio',
+                'contacto_identity', 'contacto_numero', 'usuario_respuesta', 'usuario_tipo_respuesta', 'usuario_contenido', 'usuario_fecha_respuesta',
+                'ticket_generado', 'ticket_id', 'ticket_sequentialId', 'ticket_estado', 'ticket_fecha_cierre', 'ticket_tipo_cierre', 'ticket_agente', 'ticket_duracion'
+            ];
+            const parserPlantilla = new Parser({ fields: camposPlantilla, header: true });
+            const csvPlantilla = parserPlantilla.parse(ticketsPlantilla);
+            const nombreArchivoPlantilla = `tickets_plantilla_${correoAgente.replace(/[@.]/g, '_')}.csv`;
+            const rutaPlantilla = path.join(carpetaReportes, nombreArchivoPlantilla);
+            fs.writeFileSync(rutaPlantilla, csvPlantilla);
+            plantillaPath = rutaPlantilla;
+        }
+        return { botPath, plantillaPath };
+    } catch (error) {
+        console.error('[consolidarTicketsPorAgenteCsvs] Error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Obtiene la lista única de correos de agentes (agente y ticket_agente) de los archivos de atención
+ * @param {string} directorio - Directorio base (usualmente 'data/tickets')
+ * @returns {string[]} - Lista única de correos de agentes
+ */
+const obtenerAgentesUnicos = (directorio) => {
+    const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+    if (!fs.existsSync(carpetaReportes)) return [];
+    const archivos = fs.readdirSync(carpetaReportes);
+    const archivosAtencion = archivos.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+    const agentesSet = new Set();
+    for (const archivo of archivosAtencion) {
+        const rutaArchivo = path.join(carpetaReportes, archivo);
+        const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+        const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+        registros.forEach(t => {
+            if (t.agente) agentesSet.add(t.agente);
+            if (t.ticket_agente) agentesSet.add(t.ticket_agente);
+        });
+    }
+    return Array.from(agentesSet).filter(Boolean).sort();
+};
+
+/**
+ * Obtiene la lista única de nombres de plantillas de los archivos de atención
+ * @param {string} directorio - Directorio base (usualmente 'data/tickets')
+ * @returns {string[]} - Lista única de nombres de plantillas
+ */
+const obtenerPlantillasUnicas = (directorio) => {
+    const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
+    if (!fs.existsSync(carpetaReportes)) return [];
+    const archivos = fs.readdirSync(carpetaReportes);
+    const archivosAtencion = archivos.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+    const plantillasSet = new Set();
+    for (const archivo of archivosAtencion) {
+        const rutaArchivo = path.join(carpetaReportes, archivo);
+        const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+        const registros = parse(contenido, { columns: true, skip_empty_lines: true });
+        registros.forEach(t => {
+            if (t.plantilla_nombre) plantillasSet.add(t.plantilla_nombre);
+        });
+    }
+    return Array.from(plantillasSet).filter(Boolean).sort();
+};
+
 module.exports = {
     convertJsonToCsv,
     consolidarCsvs,
@@ -1931,5 +2069,8 @@ module.exports = {
     crearZipTickets,
     exportarCampanasDetallado,
     consolidarCampanasIndependiente,
-    exportarSoloCampanas
+    exportarSoloCampanas,
+    consolidarTicketsPorAgenteCsvs,
+    obtenerAgentesUnicos,
+    obtenerPlantillasUnicas
 }; 

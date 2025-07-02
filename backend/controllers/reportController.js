@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { generarNombreArchivo } = require('../utils/blipUtils');
-const { consolidarTicketsCsvs, crearZipTickets } = require('../utils/csvUtils');
+const { consolidarTicketsCsvs, crearZipTickets, consolidarTicketsPorAgenteCsvs, obtenerAgentesUnicos, obtenerPlantillasUnicas } = require('../utils/csvUtils');
 
 const reportController = {
     // Obtener lista de reportes disponibles
@@ -293,6 +293,71 @@ const reportController = {
                 message: 'Error al generar el reporte',
                 error: error.message
             });
+        }
+    },
+    // Descargar reporte de agentes filtrado
+    downloadAgentes: async (req, res) => {
+        try {
+            const { fechaInicio, fechaFin, nombrePlantilla, correoAgente } = req.query;
+            if (!correoAgente) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Debe proporcionar el correo del agente.'
+                });
+            }
+            const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
+            const carpeta = path.join(__dirname, '..', 'data', 'tickets');
+            const { botPath, plantillaPath } = await consolidarTicketsPorAgenteCsvs(carpeta, correoAgente, fechas, nombrePlantilla);
+            if (!botPath && !plantillaPath) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'No hay tickets BOT ni PLANTILLA para exportar para este agente y filtros.'
+                });
+            }
+            // Crear ZIP con los archivos generados
+            const zipPath = await crearZipTickets(botPath, plantillaPath, carpeta);
+            if (!fs.existsSync(zipPath)) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Error al generar el archivo ZIP.'
+                });
+            }
+            res.download(zipPath, err => {
+                if (err) {
+                    console.error('[downloadAgentes] Error al enviar ZIP:', err);
+                    res.status(500).json({
+                        success: false,
+                        message: 'Error al descargar el archivo ZIP.'
+                    });
+                }
+            });
+        } catch (error) {
+            console.error('[downloadAgentes] Error:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno al exportar los tickets de agentes.',
+                error: error.message
+            });
+        }
+    },
+    // Endpoint para obtener lista única de agentes
+    getAgentesList: (req, res) => {
+        try {
+            const carpeta = path.join(__dirname, '..', 'data', 'tickets');
+            const agentes = obtenerAgentesUnicos(carpeta);
+            res.json(agentes);
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al obtener la lista de agentes', error: error.message });
+        }
+    },
+    // Endpoint para obtener lista única de plantillas
+    getPlantillasList: (req, res) => {
+        try {
+            const carpeta = path.join(__dirname, '..', 'data', 'tickets');
+            const plantillas = obtenerPlantillasUnicas(carpeta);
+            res.json(plantillas);
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Error al obtener la lista de plantillas', error: error.message });
         }
     }
 };

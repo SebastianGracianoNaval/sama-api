@@ -136,6 +136,13 @@ export const reportService = {
       params: { fechaInicio, fechaFin, nombrePlantilla },
       responseType: 'blob'
     })),
+  downloadAgentesReport: (correoAgente, fechaInicio, fechaFin, nombrePlantilla) =>
+    handleBlobResponse(api.get('/descargar/agentes', {
+      params: { correoAgente, fechaInicio, fechaFin, nombrePlantilla },
+      responseType: 'blob'
+    })),
+  getAgentesList: () => api.get('/api/agentes'),
+  getPlantillasList: () => api.get('/api/plantillas'),
 };
 
 export default api; 

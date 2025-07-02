@@ -16,6 +16,7 @@ const { parse } = require('csv-parse/sync');
 const { Parser } = require('json2csv');
 const archiver = require('archiver');
 const os = require('os');
+const { downloadAgentes, getAgentesList, getPlantillasList } = require('./controllers/reportController');
 
 // Crear una aplicación Express
 const app = express();
@@ -673,6 +674,11 @@ app.post('/api/identificar-ticket', async (req, res) => {
 
 // Ruta de debug para verificar estado de archivos
 app.get('/api/debug/files', reportController.debugFiles);
+
+app.get('/descargar/agentes', downloadAgentes);
+
+app.get('/api/agentes', getAgentesList);
+app.get('/api/plantillas', getPlantillasList);
 
 // Iniciar el servidor
 app.listen(PORT, () => {

@@ -7,6 +7,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import ClearIcon from '@mui/icons-material/Clear';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { showToast } from './Toast';
+import { reportService } from '../services/api';
 
 // Mock de servicio para obtener correos de agentes y plantillas
 const fetchAgentes = async () => {
@@ -61,11 +62,23 @@ const AgentesPanel = () => {
   const [kpis, setKpis] = useState([]);
   const [dataChanged, setDataChanged] = useState(false);
   const prevFilters = useRef({ fechaInicio: '', fechaFin: '', plantilla: '', agente: '' });
+  const [error, setError] = useState('');
 
-  // Cargar listas al montar
+  // Cargar listas dinámicas de agentes y plantillas al montar
   useEffect(() => {
-    fetchAgentes().then(setAgentes);
-    fetchPlantillas().then(setPlantillas);
+    const fetchFiltros = async () => {
+      try {
+        const [resAgentes, resPlantillas] = await Promise.all([
+          reportService.getAgentesList(),
+          reportService.getPlantillasList()
+        ]);
+        setAgentes(resAgentes.data || []);
+        setPlantillas(resPlantillas.data || []);
+      } catch (err) {
+        setError('Error al cargar filtros dinámicos');
+      }
+    };
+    fetchFiltros();
   }, []);
 
   // Detectar cambios en los filtros para habilitar el botón de refrescar
@@ -114,9 +127,33 @@ const AgentesPanel = () => {
     return true;
   };
 
-  const descargar = () => {
+  const descargar = async () => {
     if (!validarFiltros()) return;
-    showToast('Descarga simulada (mock)', 'success');
+    setLoading(true);
+    setError('');
+    try {
+      const response = await reportService.downloadAgentesReport(
+        agente,
+        fechaInicio || undefined,
+        fechaFin || undefined,
+        plantilla || undefined
+      );
+      // Descargar el archivo ZIP
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'reporte_agente.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('Reporte descargado correctamente', 'success');
+    } catch (err) {
+      setError(err.message || 'Error al descargar el reporte');
+      showToast(err.message || 'Error al descargar el reporte', 'error');
+    }
+    setLoading(false);
   };
 
   const buscarKPIs = () => {
@@ -127,6 +164,40 @@ const AgentesPanel = () => {
       setLoading(false);
     }, 700);
   };
+
+  // Cargar listas dinámicas de agentes y plantillas
+  const fetchAgentesDinamico = async () => {
+    try {
+      const res = await reportService.getReportesList();
+      // Extraer correos únicos de los reportes
+      const archivos = res.data.files || [];
+      const correos = new Set();
+      archivos.forEach(file => {
+        if (file.name.startsWith('atencion_') && file.name.endsWith('.csv')) {
+          // Leer el archivo y extraer correos (esto requiere endpoint backend, aquí es mock)
+        }
+      });
+      // Por ahora, usar el mock
+      setAgentes(['agente1@empresa.com', 'agente2@empresa.com', 'agente3@empresa.com']);
+    } catch {
+      setAgentes([]);
+    }
+  };
+  const fetchPlantillasDinamico = async () => {
+    try {
+      const res = await reportService.getCampanasList();
+      // Extraer nombres únicos
+      const lista = res.data || [];
+      setPlantillas([...new Set(lista)]);
+    } catch {
+      setPlantillas([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchAgentesDinamico();
+    fetchPlantillasDinamico();
+  }, []);
 
   return (
     <Paper elevation={3} sx={{ p: 3, mb: 4, overflow: 'hidden' }}>
@@ -199,7 +270,7 @@ const AgentesPanel = () => {
             <MenuItem value="">
               <em>Seleccione un agente</em>
             </MenuItem>
-            {agentes.map((a) => (
+            {[...new Set(agentes)].map((a) => (
               <MenuItem key={a} value={a}>{a}</MenuItem>
             ))}
           </Select>
@@ -218,38 +289,22 @@ const AgentesPanel = () => {
           </span>
         </Tooltip>
         <Button
-          variant="outlined"
-          startIcon={<ClearIcon />}
-          color="secondary"
-          sx={theme => ({
-            minWidth: '100px',
-            bgcolor: theme.palette.mode === 'dark' ? '#fff' : '#f5f5f5',
-            color: theme.palette.mode === 'dark' ? '#222' : '#333',
-            borderColor: theme.palette.mode === 'dark' ? '#bbb' : '#ccc',
-            '&:hover': {
-              bgcolor: theme.palette.mode === 'dark' ? '#eee' : '#e0e0e0',
-              borderColor: theme.palette.mode === 'dark' ? '#888' : '#bbb',
-            },
-          })}
-          onClick={limpiarFiltros}
-          disabled={loading}
-        >
-          Limpiar
-        </Button>
-      </Box>
-      {/* Fila separada para el botón de descargar informe */}
-      <Box sx={{ mt: 2, mb: 1, display: 'flex', justifyContent: 'flex-start' }}>
-        <Button
           variant="contained"
           color="primary"
           startIcon={<FileDownloadIcon />}
-          sx={{ minWidth: 160, fontWeight: 700, borderRadius: 2, height: 40 }}
           onClick={descargar}
           disabled={loading}
+          sx={{ minWidth: 200, fontWeight: 600 }}
         >
-          Descargar Informe
+          {loading ? <CircularProgress size={24} color="inherit" /> : 'DESCARGAR INFORME'}
         </Button>
+        <Tooltip title="Limpiar filtros">
+          <IconButton onClick={limpiarFiltros}>
+            <ClearIcon />
+          </IconButton>
+        </Tooltip>
       </Box>
+      {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
       <Box sx={{ mt: 4 }}>
         {loading ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
