@@ -1,103 +1,221 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 const API_URL = 'https://sama-api-wppm.onrender.com';
 
-async function generateTestDataProduction() {
-    console.log('=== GENERANDO DATOS DE PRUEBA EN PRODUCCIÓN ===');
-    
-    try {
-        // 1. Enviar un webhook de ticket de apertura
-        console.log('1. Enviando webhook de ticket de apertura...');
-        const ticketWebhook = {
-            id: 'ticket_test_001',
-            type: 'application/vnd.iris.ticket+json',
-            from: '5491169007611@wa.gw.msging.net',
-            to: 'bot@msging.net',
-            content: {
-                sequentialId: '001',
-                parentSequentialId: null,
-                status: 'open',
-                team: 'default'
-            },
-            metadata: {
-                '#envelope.storageDate': new Date().toISOString()
-            }
-        };
-        
-        const ticketResponse = await axios.post(`${API_URL}/webhook`, ticketWebhook);
-        console.log('✅ Ticket webhook enviado:', ticketResponse.data);
-        
-        // 2. Enviar algunos mensajes
-        console.log('2. Enviando mensajes...');
-        const mensaje1 = {
-            id: 'msg_001',
-            type: 'text/plain',
-            from: '5491169007611@wa.gw.msging.net',
-            to: 'bot@msging.net',
-            content: 'Hola, necesito ayuda',
-            metadata: {
-                '#envelope.storageDate': new Date().toISOString()
-            }
-        };
-        
-        const mensaje2 = {
-            id: 'msg_002',
-            type: 'text/plain',
-            from: 'bot@msging.net',
-            to: '5491169007611@wa.gw.msging.net',
-            content: 'Hola, ¿en qué puedo ayudarte?',
-            metadata: {
-                '#envelope.storageDate': new Date().toISOString()
-            }
-        };
-        
-        await axios.post(`${API_URL}/webhook`, mensaje1);
-        await axios.post(`${API_URL}/webhook`, mensaje2);
-        console.log('✅ Mensajes enviados');
-        
-        // 3. Enviar evento de cierre de ticket
-        console.log('3. Enviando evento de cierre de ticket...');
-        const botEvent = {
-            correoAgente: 'agente@test.com',
-            ticketFinalizo: true,
-            identity: '5491169007611@wa.gw.msging.net',
-            tipoEvento: 'finalizacion_ticket',
-            tipoCierre: 'resuelto'
-        };
-        
-        const botResponse = await axios.post(`${API_URL}/api/bot-event`, botEvent);
-        console.log('✅ Bot event enviado:', botResponse.data);
-        
-        // 4. Esperar un momento para que se procese
-        console.log('4. Esperando 3 segundos para procesamiento...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // 5. Probar el endpoint de tickets
-        console.log('5. Probando endpoint de tickets...');
-        const ticketsResponse = await axios.get(`${API_URL}/api/reportes/tickets`, {
-            responseType: 'blob'
-        });
-        
-        console.log('✅ Endpoint de tickets funciona!');
-        console.log('Status:', ticketsResponse.status);
-        console.log('Content-Type:', ticketsResponse.headers['content-type']);
-        console.log('Content-Disposition:', ticketsResponse.headers['content-disposition']);
-        console.log('Tamaño:', ticketsResponse.data.length, 'bytes');
-        
-    } catch (error) {
-        console.error('❌ Error:', error.response?.data || error.message);
-        
-        if (error.response) {
-            console.error('Status:', error.response.status);
-            console.error('Headers:', error.response.headers);
-            
-            if (error.response.data instanceof Buffer) {
-                const text = error.response.data.toString();
-                console.error('Response text:', text);
-            }
-        }
+// Configuración de agentes y plantillas
+const agentes = [
+  'agente1@empresa.com',
+  'agente2@empresa.com',
+  'agente3@empresa.com',
+  'agente4@empresa.com',
+];
+const plantillas = [
+  { nombre: 'Bienvenida', id: 'tpl1' },
+  { nombre: 'Promocion', id: 'tpl2' },
+  { nombre: 'Recordatorio', id: 'tpl3' },
+];
+
+// Limpiar datos previos
+function limpiarDatos() {
+  const rutas = [
+    path.join(__dirname, 'data', 'tickets'),
+    path.join(__dirname, 'data', 'reportes'),
+  ];
+  rutas.forEach((dir) => {
+    if (fs.existsSync(dir)) {
+      fs.readdirSync(dir).forEach((f) => {
+        const filePath = path.join(dir, f);
+        if (fs.lstatSync(filePath).isFile()) fs.unlinkSync(filePath);
+      });
     }
+  });
+  console.log('🧹 Datos previos eliminados.');
 }
 
-// Ejecutar el script
+async function generarAtencionBOT(idx, agente, fechaBase) {
+  const contacto = `54911690076${idx + 10}@wa.gw.msging.net`;
+  const sequentialId = `B${idx + 1}`;
+  // 1. Ticket de apertura
+  await axios.post(`${API_URL}/webhook`, {
+    id: `ticket_bot_${sequentialId}`,
+    type: 'application/vnd.iris.ticket+json',
+    from: contacto,
+    to: 'bot@msging.net',
+    content: {
+      sequentialId,
+      parentSequentialId: null,
+      status: 'open',
+      team: 'default',
+    },
+    metadata: {
+      '#envelope.storageDate': fechaBase,
+    },
+  });
+  // 2. Mensaje del cliente
+  await axios.post(`${API_URL}/webhook`, {
+    id: `msg_bot_${sequentialId}_1`,
+    type: 'text/plain',
+    from: contacto,
+    to: 'bot@msging.net',
+    content: 'Hola, soy cliente',
+    metadata: { '#envelope.storageDate': fechaBase },
+  });
+  // 3. Mensaje del bot
+  await axios.post(`${API_URL}/webhook`, {
+    id: `msg_bot_${sequentialId}_2`,
+    type: 'text/plain',
+    from: 'bot@msging.net',
+    to: contacto,
+    content: 'Hola, ¿en qué puedo ayudarte?',
+    metadata: { '#envelope.storageDate': fechaBase },
+  });
+  // 4. Evento de cierre
+  await axios.post(`${API_URL}/api/bot-event`, {
+    correoAgente: agente,
+    ticketFinalizo: true,
+    identity: contacto,
+    tipoEvento: 'finalizacion_ticket',
+    tipoCierre: 'resuelto',
+  });
+  console.log(`✅ Atencion BOT ${sequentialId} generada para ${agente}`);
+}
+
+async function generarAtencionPLANTILLA(idx, agente, plantilla, fechaBase) {
+  const contacto = `54911690076${idx + 20}@wa.gw.msging.net`;
+  const sequentialId = `P${idx + 1}`;
+  // 1. Enviar plantilla
+  await axios.post(`${API_URL}/webhook`, {
+    id: `plantilla_${sequentialId}`,
+    type: 'application/vnd.iris.template+json',
+    from: 'bot@msging.net',
+    to: contacto,
+    content: {
+      template: { name: plantilla.nombre },
+      templateContent: { name: plantilla.nombre },
+      type: 'template',
+    },
+    metadata: {
+      '#envelope.storageDate': fechaBase,
+      '#activecampaign.flowId': plantilla.id,
+      '#activecampaign.name': plantilla.nombre,
+    },
+  });
+  // 2. Ticket generado por plantilla
+  await axios.post(`${API_URL}/webhook`, {
+    id: `ticket_plantilla_${sequentialId}`,
+    type: 'application/vnd.iris.ticket+json',
+    from: contacto,
+    to: 'bot@msging.net',
+    content: {
+      sequentialId,
+      parentSequentialId: null,
+      status: 'open',
+      team: 'default',
+    },
+    metadata: {
+      '#envelope.storageDate': fechaBase,
+    },
+  });
+  // 3. Mensaje del cliente
+  await axios.post(`${API_URL}/webhook`, {
+    id: `msg_plantilla_${sequentialId}_1`,
+    type: 'text/plain',
+    from: contacto,
+    to: 'bot@msging.net',
+    content: 'Recibí la plantilla',
+    metadata: { '#envelope.storageDate': fechaBase },
+  });
+  // 4. Evento de cierre
+  await axios.post(`${API_URL}/api/bot-event`, {
+    correoAgente: agente,
+    ticketFinalizo: true,
+    identity: contacto,
+    tipoEvento: 'finalizacion_ticket',
+    tipoCierre: 'resuelto',
+  });
+  console.log(`✅ Atencion PLANTILLA ${sequentialId} generada para ${agente} (${plantilla.nombre})`);
+}
+
+async function generarTransferencia(idx, agenteOrigen, agenteDestino, fechaBase) {
+  const contacto = `54911690076${idx + 30}@wa.gw.msging.net`;
+  // Ticket padre
+  await axios.post(`${API_URL}/webhook`, {
+    id: `ticket_transfer_${idx}_padre`,
+    type: 'application/vnd.iris.ticket+json',
+    from: contacto,
+    to: 'bot@msging.net',
+    content: {
+      sequentialId: `T${idx}A`,
+      parentSequentialId: null,
+      status: 'open',
+      team: 'default',
+    },
+    metadata: {
+      '#envelope.storageDate': fechaBase,
+    },
+  });
+  // Ticket hijo (transferencia)
+  await axios.post(`${API_URL}/webhook`, {
+    id: `ticket_transfer_${idx}_hijo`,
+    type: 'application/vnd.iris.ticket+json',
+    from: contacto,
+    to: 'bot@msging.net',
+    content: {
+      sequentialId: `T${idx}B`,
+      parentSequentialId: `T${idx}A`,
+      status: 'open',
+      team: 'DIRECT_TRANSFER',
+      agentIdentity: agenteDestino,
+    },
+    metadata: {
+      '#envelope.storageDate': fechaBase,
+    },
+  });
+  // Mensaje del cliente
+  await axios.post(`${API_URL}/webhook`, {
+    id: `msg_transfer_${idx}_1`,
+    type: 'text/plain',
+    from: contacto,
+    to: 'bot@msging.net',
+    content: 'Quiero que me transfieran',
+    metadata: { '#envelope.storageDate': fechaBase },
+  });
+  // Evento de cierre para el agente destino
+  await axios.post(`${API_URL}/api/bot-event`, {
+    correoAgente: agenteDestino,
+    ticketFinalizo: true,
+    identity: contacto,
+    tipoEvento: 'finalizacion_ticket',
+    tipoCierre: 'transferido',
+  });
+  console.log(`✅ Transferencia generada de ${agenteOrigen} a ${agenteDestino}`);
+}
+
+async function generateTestDataProduction() {
+  console.log('=== GENERANDO DATOS DE PRUEBA EN PRODUCCIÓN ===');
+  limpiarDatos();
+  try {
+    // Fechas base
+    const hoy = new Date();
+    // 3 atenciones BOT
+    for (let i = 0; i < 3; i++) {
+      const fecha = new Date(hoy.getTime() - (i * 86400000)).toISOString();
+      await generarAtencionBOT(i, agentes[i], fecha);
+    }
+    // 3 atenciones PLANTILLA
+    for (let i = 0; i < 3; i++) {
+      const fecha = new Date(hoy.getTime() - ((i + 3) * 86400000)).toISOString();
+      await generarAtencionPLANTILLA(i, agentes[(i + 1) % agentes.length], plantillas[i], fecha);
+    }
+    // 2 transferencias (entre agentes distintos)
+    await generarTransferencia(1, agentes[0], agentes[1], hoy.toISOString());
+    await generarTransferencia(2, agentes[2], agentes[3], hoy.toISOString());
+    console.log('🎉 Datos de prueba generados correctamente.');
+  } catch (error) {
+    console.error('❌ Error:', error.response?.data || error.message);
+  }
+}
+
 generateTestDataProduction(); 

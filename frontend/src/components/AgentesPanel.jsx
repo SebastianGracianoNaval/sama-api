@@ -9,47 +9,6 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { showToast } from './Toast';
 import { reportService } from '../services/api';
 
-// Mock de servicio para obtener correos de agentes y plantillas
-const fetchAgentes = async () => {
-  // Simular llamada a backend
-  return [
-    'agente1@empresa.com',
-    'agente2@empresa.com',
-    'agente3@empresa.com',
-  ];
-};
-const fetchPlantillas = async () => {
-  return [
-    'Bienvenida',
-    'Promoción',
-    'Recordatorio',
-  ];
-};
-
-const mockKPIs = [
-  {
-    correo: 'agente1@empresa.com',
-    totalTickets: 12,
-    totalCampanas: 5,
-    tasaRespuesta: '85%',
-    tiempoPromedio: '1d 2h',
-  },
-  {
-    correo: 'agente2@empresa.com',
-    totalTickets: 8,
-    totalCampanas: 3,
-    tasaRespuesta: '90%',
-    tiempoPromedio: '2d 4h',
-  },
-  {
-    correo: 'agente3@empresa.com',
-    totalTickets: 15,
-    totalCampanas: 7,
-    tasaRespuesta: '78%',
-    tiempoPromedio: '3d 1h',
-  },
-];
-
 const AgentesPanel = () => {
   const theme = useTheme();
   const [fechaInicio, setFechaInicio] = useState('');
@@ -102,8 +61,8 @@ const AgentesPanel = () => {
   const refrescarListas = async () => {
     setLoading(true);
     await Promise.all([
-      fetchAgentes().then(setAgentes),
-      fetchPlantillas().then(setPlantillas),
+      reportService.getAgentesList().then(setAgentes),
+      reportService.getPlantillasList().then(setPlantillas),
     ]);
     setLoading(false);
     prevFilters.current = { fechaInicio, fechaFin, plantilla, agente };
@@ -270,8 +229,8 @@ const AgentesPanel = () => {
             <MenuItem value="">
               <em>Seleccione un agente</em>
             </MenuItem>
-            {[...new Set(agentes)].map((a) => (
-              <MenuItem key={a} value={a}>{a}</MenuItem>
+            {agentes.map((correo) => (
+              <MenuItem key={correo} value={correo}>{correo}</MenuItem>
             ))}
           </Select>
         </FormControl>
