@@ -115,49 +115,6 @@ const AgentesPanel = () => {
     setLoading(false);
   };
 
-  const buscarKPIs = () => {
-    if (!validarFiltros()) return;
-    setLoading(true);
-    setTimeout(() => {
-      setKpis(mockKPIs.filter(k => k.correo === agente));
-      setLoading(false);
-    }, 700);
-  };
-
-  // Cargar listas dinámicas de agentes y plantillas
-  const fetchAgentesDinamico = async () => {
-    try {
-      const res = await reportService.getReportesList();
-      // Extraer correos únicos de los reportes
-      const archivos = res.data.files || [];
-      const correos = new Set();
-      archivos.forEach(file => {
-        if (file.name.startsWith('atencion_') && file.name.endsWith('.csv')) {
-          // Leer el archivo y extraer correos (esto requiere endpoint backend, aquí es mock)
-        }
-      });
-      // Por ahora, usar el mock
-      setAgentes(['agente1@empresa.com', 'agente2@empresa.com', 'agente3@empresa.com']);
-    } catch {
-      setAgentes([]);
-    }
-  };
-  const fetchPlantillasDinamico = async () => {
-    try {
-      const res = await reportService.getCampanasList();
-      // Extraer nombres únicos
-      const lista = res.data || [];
-      setPlantillas([...new Set(lista)]);
-    } catch {
-      setPlantillas([]);
-    }
-  };
-
-  useEffect(() => {
-    fetchAgentesDinamico();
-    fetchPlantillasDinamico();
-  }, []);
-
   return (
     <Paper elevation={3} sx={{ p: 3, mb: 4, overflow: 'hidden' }}>
       <Typography variant="h5" gutterBottom component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
