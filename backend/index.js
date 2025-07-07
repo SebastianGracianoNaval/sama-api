@@ -492,8 +492,8 @@ app.get('/descargar/tickets', async (req, res) => {
 app.get('/api/campanas', async (req, res) => {
     try {
         console.log('[API/CAMPANAS] Obteniendo lista de campanas disponibles');
-        const carpetaPlantillas = path.join(__dirname, 'data', 'plantillas');
-        const campanas = obtenerCampanasDisponibles(carpetaPlantillas);
+        const carpetaReportes = path.join(__dirname, 'data', 'reportes');
+        const campanas = obtenerPlantillasUnicas(path.join(__dirname, 'data', 'tickets'));
         
         res.json({
             success: true,

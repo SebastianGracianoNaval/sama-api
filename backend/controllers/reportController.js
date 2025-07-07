@@ -148,34 +148,37 @@ const reportController = {
             if (tipo === 'tickets') {
                 console.log('[ReportController] Procesando consolidación de tickets');
                 
+                // Usar la carpeta tickets como directorio base (para la función consolidarTicketsCsvs)
                 const carpeta = path.join(__dirname, '..', 'data', 'tickets');
-                console.log(`[ReportController] Carpeta de tickets: ${carpeta}`);
-                console.log(`[ReportController] ¿Existe carpeta?: ${fs.existsSync(carpeta)}`);
+                console.log(`[ReportController] Carpeta base: ${carpeta}`);
                 
-                if (!fs.existsSync(carpeta)) {
-                    console.log(`[ReportController] Carpeta de tickets no existe: ${carpeta}`);
-                    return res.status(404).json({
-                        success: false,
-                        message: 'No se encontró el directorio de tickets.'
-                    });
-                }
-                
-                // Verificar contenido de la carpeta tickets
-                const archivosTickets = fs.readdirSync(carpeta);
-                console.log(`[ReportController] Archivos en carpeta tickets:`, archivosTickets);
-                
-                // Verificar carpeta reportes
+                // Verificar carpeta reportes donde están los archivos de atención
                 const carpetaReportes = path.join(path.dirname(carpeta), 'reportes');
                 console.log(`[ReportController] Carpeta reportes: ${carpetaReportes}`);
                 console.log(`[ReportController] ¿Existe carpeta reportes?: ${fs.existsSync(carpetaReportes)}`);
                 
-                if (fs.existsSync(carpetaReportes)) {
-                    const archivosReportes = fs.readdirSync(carpetaReportes);
-                    console.log(`[ReportController] Archivos en carpeta reportes:`, archivosReportes);
-                    
-                    // Buscar archivos de atención específicamente
-                    const archivosAtencion = archivosReportes.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
-                    console.log(`[ReportController] Archivos de atención encontrados:`, archivosAtencion);
+                if (!fs.existsSync(carpetaReportes)) {
+                    console.log(`[ReportController] Carpeta reportes no existe: ${carpetaReportes}`);
+                    return res.status(404).json({
+                        success: false,
+                        message: 'No se encontró el directorio de reportes.'
+                    });
+                }
+                
+                // Verificar contenido de la carpeta reportes
+                const archivosReportes = fs.readdirSync(carpetaReportes);
+                console.log(`[ReportController] Archivos en carpeta reportes:`, archivosReportes);
+                
+                // Buscar archivos de atención específicamente
+                const archivosAtencion = archivosReportes.filter(archivo => archivo.startsWith('atencion_') && archivo.endsWith('.csv'));
+                console.log(`[ReportController] Archivos de atención encontrados:`, archivosAtencion);
+                
+                if (archivosAtencion.length === 0) {
+                    console.log(`[ReportController] No hay archivos de atención para procesar`);
+                    return res.status(404).json({
+                        success: false,
+                        message: 'No hay datos de tickets para exportar.'
+                    });
                 }
                 
                 const fechas = (fechaInicio && fechaFin) ? { fechaInicio, fechaFin } : null;
@@ -196,7 +199,7 @@ const reportController = {
                 
                 // Crear ZIP con los dos archivos
                 console.log(`[ReportController] Creando ZIP con archivos...`);
-                const zipPath = await crearZipTickets(botPath, plantillaPath, carpeta);
+                const zipPath = await crearZipTickets(botPath, plantillaPath, carpeta, 'tickets');
                 console.log(`[ReportController] ZIP creado en: ${zipPath}`);
                 
                 // Establecer el header Content-Disposition
@@ -315,7 +318,7 @@ const reportController = {
                 });
             }
             // Crear ZIP con los archivos generados
-            const zipPath = await crearZipTickets(botPath, plantillaPath, carpeta);
+            const zipPath = await crearZipTickets(botPath, plantillaPath, carpeta, 'agentes');
             if (!fs.existsSync(zipPath)) {
                 return res.status(500).json({
                     success: false,

@@ -735,6 +735,12 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
         
         console.log(`[consolidarTicketsCsvs] Tickets BOT: ${ticketsBot.length}, Tickets PLANTILLA: ${ticketsPlantilla.length}`);
         
+        // Crear carpeta de exportaciones de tickets
+        const carpetaExportacionesTickets = path.join(path.dirname(directorio), 'exportaciones', 'tickets');
+        if (!fs.existsSync(carpetaExportacionesTickets)) {
+            fs.mkdirSync(carpetaExportacionesTickets, { recursive: true });
+        }
+        
         // Generar CSV de tickets BOT
         let botPath = null;
         if (ticketsBot.length > 0) {
@@ -748,7 +754,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             const parserBot = new Parser({ fields: camposBot, header: true });
             const csvBot = parserBot.parse(ticketsBot);
             const nombreArchivoBot = 'tickets_bot.csv';
-            const rutaBot = path.join(carpetaReportes, nombreArchivoBot);
+            const rutaBot = path.join(carpetaExportacionesTickets, nombreArchivoBot);
             fs.writeFileSync(rutaBot, csvBot);
             botPath = rutaBot;
             console.log(`[consolidarTicketsCsvs] Archivo BOT consolidado generado: ${rutaBot}`);
@@ -770,7 +776,7 @@ const consolidarTicketsCsvs = async (directorio, fechas = null) => {
             const parserPlantilla = new Parser({ fields: camposPlantilla, header: true });
             const csvPlantilla = parserPlantilla.parse(ticketsPlantilla);
             const nombreArchivoPlantilla = 'tickets_plantilla.csv';
-            const rutaPlantilla = path.join(carpetaReportes, nombreArchivoPlantilla);
+            const rutaPlantilla = path.join(carpetaExportacionesTickets, nombreArchivoPlantilla);
             fs.writeFileSync(rutaPlantilla, csvPlantilla);
             plantillaPath = rutaPlantilla;
             console.log(`[consolidarTicketsCsvs] Archivo PLANTILLA consolidado generado: ${rutaPlantilla}`);
@@ -1527,16 +1533,16 @@ async function generarResumenDeCampanas(campaignData, baseDir, periodo = 'No esp
     const parser = new Parser({ fields: campos, header: true });
     const csv = parser.parse(resultadoFinal);
 
-    // Guardar archivo
-    const dirReportes = path.join(baseDir, '..', 'reportes');
-     if (!fs.existsSync(dirReportes)) {
-        fs.mkdirSync(dirReportes, { recursive: true });
+    // Guardar archivo en la carpeta de exportaciones de campañas
+    const dirExportacionesCampanas = path.join(baseDir, '..', 'exportaciones', 'campanas');
+    if (!fs.existsSync(dirExportacionesCampanas)) {
+        fs.mkdirSync(dirExportacionesCampanas, { recursive: true });
     }
     const now = new Date();
     const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
     const fecha = now.toISOString().slice(0,10);
     const nombreArchivo = `resumen_campanas_${hora}_${fecha}.csv`;
-    const rutaCsv = path.join(dirReportes, nombreArchivo);
+    const rutaCsv = path.join(dirExportacionesCampanas, nombreArchivo);
 
     fs.writeFileSync(rutaCsv, csv);
     console.log(`[generarResumenDeCampanas] Archivo de resumen generado: ${rutaCsv}`);
@@ -1551,18 +1557,25 @@ async function generarResumenDeCampanas(campaignData, baseDir, periodo = 'No esp
  * @param {string} directorio - Directorio donde guardar el ZIP
  * @returns {Promise<string>} - Ruta del archivo ZIP generado
  */
-const crearZipTickets = async (botPath, plantillaPath, directorio) => {
+const crearZipTickets = async (botPath, plantillaPath, directorio, tipoExportacion = 'tickets') => {
     try {
-        const carpetaReportes = path.join(path.dirname(directorio), 'reportes');
-        if (!fs.existsSync(carpetaReportes)) {
-            fs.mkdirSync(carpetaReportes, { recursive: true });
+        // Determinar carpeta de destino según el tipo de exportación
+        let carpetaDestino;
+        if (tipoExportacion === 'agentes') {
+            carpetaDestino = path.join(path.dirname(directorio), 'exportaciones', 'agentes');
+        } else {
+            carpetaDestino = path.join(path.dirname(directorio), 'exportaciones', 'tickets');
+        }
+        
+        if (!fs.existsSync(carpetaDestino)) {
+            fs.mkdirSync(carpetaDestino, { recursive: true });
         }
         
         const now = new Date();
         const hora = now.toTimeString().slice(0,8).replace(/:/g, '-');
         const fecha = now.toISOString().slice(0,10);
-        const nombreZip = `tickets_${hora}_${fecha}.zip`;
-        const rutaZip = path.join(carpetaReportes, nombreZip);
+        const nombreZip = `${tipoExportacion}_${hora}_${fecha}.zip`;
+        const rutaZip = path.join(carpetaDestino, nombreZip);
         
         // Crear stream de escritura para el ZIP
         const output = fs.createWriteStream(rutaZip);
@@ -1630,10 +1643,14 @@ const exportarCampanasDetallado = async (directorio, fechas = null, nombrePlanti
     if (filtrados.length === 0) {
         return { filePath: null, data: [] };
     }
-    // Generar nombre de archivo
+    // Generar nombre de archivo en la carpeta de exportaciones de campañas
+    const carpetaExportacionesCampanas = path.join(path.dirname(directorio), 'exportaciones', 'campanas');
+    if (!fs.existsSync(carpetaExportacionesCampanas)) {
+        fs.mkdirSync(carpetaExportacionesCampanas, { recursive: true });
+    }
     const now = new Date();
     const nombreArchivo = `campanas_detallado_${now.toISOString().replace(/:/g, '_')}.csv`;
-    const rutaCsv = path.join(carpetaReportes, nombreArchivo);
+    const rutaCsv = path.join(carpetaExportacionesCampanas, nombreArchivo);
     // Usar los mismos campos que tickets_plantilla.csv
     const campos = Object.keys(filtrados[0]);
     const parser = new Parser({ fields: campos, header: true });
@@ -1745,9 +1762,13 @@ const consolidarCampanasIndependiente = async (directorio, fechas = null, nombre
         const csv = parser.parse(ticketsFiltrados);
         
         // 5. GENERAR NOMBRE DE ARCHIVO Y GUARDAR
+        const carpetaExportacionesCampanas = path.join(path.dirname(directorio), 'exportaciones', 'campanas');
+        if (!fs.existsSync(carpetaExportacionesCampanas)) {
+            fs.mkdirSync(carpetaExportacionesCampanas, { recursive: true });
+        }
         const now = new Date();
         const nombreArchivo = `campanas_detallado_${now.toISOString().replace(/:/g, '_')}.csv`;
-        const rutaCsv = path.join(carpetaReportes, nombreArchivo);
+        const rutaCsv = path.join(carpetaExportacionesCampanas, nombreArchivo);
         
         fs.writeFileSync(rutaCsv, csv);
         console.log(`[consolidarCampanasIndependiente] Archivo CSV generado: ${rutaCsv}`);
@@ -1890,9 +1911,14 @@ const exportarSoloCampanas = async (directorio, fechas = null, nombrePlantilla =
         const csv = parser.parse(ticketsFiltrados);
         
         // 6. GENERAR NOMBRE DE ARCHIVO Y GUARDAR
+        const carpetaExportacionesCampanas = path.join(path.dirname(directorio), 'exportaciones', 'campanas');
+        if (!fs.existsSync(carpetaExportacionesCampanas)) {
+            fs.mkdirSync(carpetaExportacionesCampanas, { recursive: true });
+        }
+        
         const now = new Date();
         const nombreArchivo = `campanas_exclusivas_${now.toISOString().replace(/:/g, '_')}.csv`;
-        const rutaCsv = path.join(carpetaReportes, nombreArchivo);
+        const rutaCsv = path.join(carpetaExportacionesCampanas, nombreArchivo);
         
         fs.writeFileSync(rutaCsv, csv);
         console.log(`[exportarSoloCampanas] Archivo CSV generado: ${rutaCsv}`);
@@ -1962,6 +1988,12 @@ const consolidarTicketsPorAgenteCsvs = async (directorio, correoAgente, fechas =
                 ticketsBot.push(ticket);
             }
         }
+        // Crear carpeta de exportaciones de agentes
+        const carpetaExportacionesAgentes = path.join(path.dirname(directorio), 'exportaciones', 'agentes');
+        if (!fs.existsSync(carpetaExportacionesAgentes)) {
+            fs.mkdirSync(carpetaExportacionesAgentes, { recursive: true });
+        }
+        
         // Generar CSV de tickets BOT
         let botPath = null;
         if (ticketsBot.length > 0) {
@@ -1975,7 +2007,7 @@ const consolidarTicketsPorAgenteCsvs = async (directorio, correoAgente, fechas =
             const parserBot = new Parser({ fields: camposBot, header: true });
             const csvBot = parserBot.parse(ticketsBot);
             const nombreArchivoBot = `tickets_bot_${correoAgente.replace(/[@.]/g, '_')}.csv`;
-            const rutaBot = path.join(carpetaReportes, nombreArchivoBot);
+            const rutaBot = path.join(carpetaExportacionesAgentes, nombreArchivoBot);
             fs.writeFileSync(rutaBot, csvBot);
             botPath = rutaBot;
         }
@@ -1995,7 +2027,7 @@ const consolidarTicketsPorAgenteCsvs = async (directorio, correoAgente, fechas =
             const parserPlantilla = new Parser({ fields: camposPlantilla, header: true });
             const csvPlantilla = parserPlantilla.parse(ticketsPlantilla);
             const nombreArchivoPlantilla = `tickets_plantilla_${correoAgente.replace(/[@.]/g, '_')}.csv`;
-            const rutaPlantilla = path.join(carpetaReportes, nombreArchivoPlantilla);
+            const rutaPlantilla = path.join(carpetaExportacionesAgentes, nombreArchivoPlantilla);
             fs.writeFileSync(rutaPlantilla, csvPlantilla);
             plantillaPath = rutaPlantilla;
         }
