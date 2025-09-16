@@ -32,7 +32,8 @@ const ReportesFabButton = () => {
       onClick={() => navigate('/reportes')}
       sx={{
         position: 'fixed',
-        right: { xs: 16, sm: 32 },
+        left: { xs: 16, sm: 32 },
+        right: 'auto',
         bottom: { xs: 16, sm: 32 },
         zIndex: 2000,
         bgcolor: theme.palette.mode === 'dark' ? '#0059b3' : '#004080',
